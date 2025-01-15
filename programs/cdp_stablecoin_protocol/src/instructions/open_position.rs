@@ -111,7 +111,7 @@ impl<'info> OpenPosition<'info> {
             if usd_amount <= (price.price as u64).checked_mul(10^price.exponent as u64).ok_or(ArithmeticError::ArithmeticOverflow)?.checked_mul(ltv as u64).ok_or(ArithmeticError::ArithmeticOverflow)?.checked_div(10000 as u64).ok_or(ArithmeticError::ArithmeticOverflow)? {
                 let accounts = MintTo {
                     mint: self.stable_mint.to_account_info(),
-                    to: self.vault.to_account_info(),
+                    to: self.user_stable_ata.to_account_info(),
                     authority: self.auth.to_account_info(),
                 };
 
