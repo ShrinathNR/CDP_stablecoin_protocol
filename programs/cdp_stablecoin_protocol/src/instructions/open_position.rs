@@ -69,7 +69,13 @@ pub struct OpenPosition<'info> {
 }
 
 impl<'info> OpenPosition<'info> {
-    pub fn open_position(&mut self, auth_bump: u8, amount: u64, ltv: u16, usd_amount: u64) -> Result<()> {
+    pub fn open_position(
+        &mut self,
+        auth_bump: u8,
+        amount: u64,
+        ltv: u16,
+        usd_amount: u64,
+    ) -> Result<()> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         require!(MIN_LTV <= ltv && ltv <= MAX_LTV, PositionError::InvalidLTV);
 
@@ -95,41 +101,44 @@ impl<'info> OpenPosition<'info> {
 
         transfer(collateral_transfer_cpi_ctx, amount)?;
 
-
         self.collateral_vault_config
             .amount
             .checked_add(amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
+        let price_update = &mut self.price_update;
+        // get_price_no_older_than will fail if the price update is more than 30 seconds old
+        let maximum_age: u64 = 30;
+        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.price_feed)?;
+        let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
 
-            let price_update = &mut self.price_update;
-            // get_price_no_older_than will fail if the price update is more than 30 seconds old
-            let maximum_age: u64 = 30;
-            let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.price_feed)?;
-            let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        if usd_amount
+            <= (price.price as u64)
+                .checked_mul(10 ^ price.exponent as u64)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?
+                .checked_mul(ltv as u64)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?
+                .checked_div(10000 as u64)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?
+        {
+            let accounts = MintTo {
+                mint: self.stable_mint.to_account_info(),
+                to: self.user_stable_ata.to_account_info(),
+                authority: self.auth.to_account_info(),
+            };
 
-            if usd_amount <= (price.price as u64).checked_mul(10^price.exponent as u64).ok_or(ArithmeticError::ArithmeticOverflow)?.checked_mul(ltv as u64).ok_or(ArithmeticError::ArithmeticOverflow)?.checked_div(10000 as u64).ok_or(ArithmeticError::ArithmeticOverflow)? {
-                let accounts = MintTo {
-                    mint: self.stable_mint.to_account_info(),
-                    to: self.user_stable_ata.to_account_info(),
-                    authority: self.auth.to_account_info(),
-                };
+            let seeds = &[&b"auth"[..], &[auth_bump]];
 
-                let seeds = &[
-                    &b"auth"[..],
-                    &[auth_bump],
-                ];
+            let signer_seeds = &[&seeds[..]];
 
-                let signer_seeds = &[&seeds[..]];
+            let stable_mint_cpi_ctx = CpiContext::new_with_signer(
+                self.token_program.to_account_info(),
+                accounts,
+                signer_seeds,
+            );
 
-                let stable_mint_cpi_ctx = CpiContext::new_with_signer(
-                    self.token_program.to_account_info(),
-                    accounts,
-                    signer_seeds,
-                );
-
-                mint_to(stable_mint_cpi_ctx, usd_amount)?;
-            }
+            mint_to(stable_mint_cpi_ctx, usd_amount)?;
+        }
 
         Ok(())
     }

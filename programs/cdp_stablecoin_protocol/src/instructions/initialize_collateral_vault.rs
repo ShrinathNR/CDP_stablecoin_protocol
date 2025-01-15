@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::{constants::JITO_SOL, state::CollateralConfig, errors::CollateralError};
+use crate::{constants::JITO_SOL, errors::CollateralError, state::CollateralConfig};
 
 #[derive(Accounts)]
 #[instruction(auth_bump: u8)]
