@@ -27,7 +27,7 @@ pub mod cdp_stablecoin_protocol {
         )
     }
 
-    pub fn initialize_collateral_vault(ctx: Context<InitializeCollateralVault>) -> Result<()> {
-        ctx.accounts.initialize_collateral_vault(&ctx.bumps)
+    pub fn initialize_collateral_vault(ctx: Context<InitializeCollateralVault>, price_feed: String) -> Result<()> {
+        ctx.accounts.initialize_collateral_vault(price_feed, &ctx.bumps)
     }
 }

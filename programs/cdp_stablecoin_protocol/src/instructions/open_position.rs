@@ -3,6 +3,7 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token::{mint_to, transfer, Mint, MintTo, Token, TokenAccount, Transfer},
 };
+use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
     constants::{MAX_LTV, MIN_LTV},
@@ -61,13 +62,14 @@ pub struct OpenPosition<'info> {
         bump = collateral_vault_config.vault_bump
     )]
     vault: Account<'info, TokenAccount>,
+    price_update: Account<'info, PriceUpdateV2>,
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
     system_program: Program<'info, System>,
 }
 
 impl<'info> OpenPosition<'info> {
-    pub fn open_position(&mut self, auth_bump: u8, amount: u64, ltv: u16) -> Result<()> {
+    pub fn open_position(&mut self, auth_bump: u8, amount: u64, ltv: u16, usd_amount: u64) -> Result<()> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         require!(MIN_LTV <= ltv && ltv <= MAX_LTV, PositionError::InvalidLTV);
 
@@ -93,46 +95,41 @@ impl<'info> OpenPosition<'info> {
 
         transfer(collateral_transfer_cpi_ctx, amount)?;
 
-        let stable_transfer_cpi_accounts = Transfer {
-            from: self.user_ata.to_account_info(),
-            to: self.vault.to_account_info(),
-            authority: self.user.to_account_info(),
-        };
-
-        let stable_transfer_cpi_ctx = CpiContext::new(
-            self.token_program.to_account_info(),
-            stable_transfer_cpi_accounts,
-        );
-
-        transfer(stable_transfer_cpi_ctx, amount)?;
 
         self.collateral_vault_config
             .amount
             .checked_add(amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        // implement mint amount with oracle
 
-        // let accounts = MintTo {
-        //     mint: self.stable_mint.to_account_info(),
-        //     to: self.vault.to_account_info(),
-        //     authority: self.auth.to_account_info(),
-        // };
+            let price_update = &mut self.price_update;
+            // get_price_no_older_than will fail if the price update is more than 30 seconds old
+            let maximum_age: u64 = 30;
+            let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.price_feed)?;
+            let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
 
-        // let seeds = &[
-        //     &b"auth"[..],
-        //     &[auth_bump],
-        // ];
+            if usd_amount <= (price.price as u64).checked_mul(10^price.exponent as u64).ok_or(ArithmeticError::ArithmeticOverflow)?.checked_mul(ltv as u64).ok_or(ArithmeticError::ArithmeticOverflow)?.checked_div(10000 as u64).ok_or(ArithmeticError::ArithmeticOverflow)? {
+                let accounts = MintTo {
+                    mint: self.stable_mint.to_account_info(),
+                    to: self.vault.to_account_info(),
+                    authority: self.auth.to_account_info(),
+                };
 
-        // let signer_seeds = &[&seeds[..]];
+                let seeds = &[
+                    &b"auth"[..],
+                    &[auth_bump],
+                ];
 
-        // let stable_mint_cpi_ctx = CpiContext::new_with_signer(
-        //     self.token_program.to_account_info(),
-        //     accounts,
-        //     signer_seeds,
-        // );
+                let signer_seeds = &[&seeds[..]];
 
-        // mint_to(stable_mint_cpi_ctx, )?;
+                let stable_mint_cpi_ctx = CpiContext::new_with_signer(
+                    self.token_program.to_account_info(),
+                    accounts,
+                    signer_seeds,
+                );
+
+                mint_to(stable_mint_cpi_ctx, usd_amount)?;
+            }
 
         Ok(())
     }

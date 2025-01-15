@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::state::CollateralConfig;
+use crate::{constants::JITO_SOL, state::CollateralConfig, errors::CollateralError};
 
 #[derive(Accounts)]
 #[instruction(auth_bump: u8)]
@@ -40,10 +40,12 @@ pub struct InitializeCollateralVault<'info> {
 impl<'info> InitializeCollateralVault<'info> {
     pub fn initialize_collateral_vault(
         &mut self,
+        price_feed: String,
         bumps: &InitializeCollateralVaultBumps,
     ) -> Result<()> {
         self.collateral_vault_config.set_inner(CollateralConfig {
             mint: self.collateral_mint.key(),
+            price_feed,
             vault: self.vault.key(),
             amount: 0,
             bump: bumps.collateral_vault_config,

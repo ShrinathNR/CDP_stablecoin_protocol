@@ -7,6 +7,11 @@ pub enum PositionError {
     #[msg("LTV Should Be Between 1% And 80%")]
     InvalidLTV,
 }
+#[error_code]
+pub enum CollateralError {
+    #[msg("This Mint Is Not Supported By The Protocol")]
+    InvalidMintAsCollateral,
+}
 
 #[error_code]
 pub enum ArithmeticError {
