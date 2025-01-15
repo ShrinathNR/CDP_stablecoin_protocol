@@ -8,4 +8,5 @@ pub struct ProtocolConfig {
     pub mint_fee: u16,
     pub min_interest_rate: u16,
     pub max_interest_rate: u16,
+    pub auth_bump: u8,
 }
