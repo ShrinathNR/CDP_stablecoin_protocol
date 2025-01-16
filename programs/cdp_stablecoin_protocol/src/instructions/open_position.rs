@@ -6,7 +6,7 @@ use anchor_spl::{
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
-    constants::{MAX_LTV, MIN_LTV},
+    constants::MAX_LTV,
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position},
 };
@@ -50,7 +50,7 @@ pub struct OpenPosition<'info> {
         init,
         payer = user,
         space = 8 + Position::INIT_SPACE,
-        seeds = [b"position", collateral_mint.key().as_ref()],
+        seeds = [b"position", user.key().as_ref(), collateral_mint.key().as_ref()],
         bump
     )]
     position: Account<'info, Position>,
@@ -69,21 +69,30 @@ pub struct OpenPosition<'info> {
 }
 
 impl<'info> OpenPosition<'info> {
-    pub fn open_position(
-        &mut self,
-        auth_bump: u8,
-        amount: u64,
-        ltv: u16,
-        usd_amount: u64,
-    ) -> Result<()> {
+    pub fn open_position(&mut self, auth_bump: u8, collateral_amount: u64, ltv: u16) -> Result<()> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
-        require!(MIN_LTV <= ltv && ltv <= MAX_LTV, PositionError::InvalidLTV);
+        require!(ltv <= MAX_LTV, PositionError::InvalidLTV);
+        let price_update = &mut self.price_update;
+        // get_price_no_older_than will fail if the price update is more than 30 seconds old
+        let maximum_age: u64 = 30;
+        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.price_feed)?;
+        let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let usd_amount = (price.price as u64)
+            .checked_mul(10 ^ price.exponent as u64)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_mul(collateral_amount)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_mul(ltv as u64)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(10000 as u64)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         self.position.set_inner(Position {
             user: self.user.key(),
             mint: self.collateral_mint.key(),
-            amount,
-            current_debt: amount,
+            collateral_amount,
+            current_debt: usd_amount,
+            ltv,
             // interest_rate,
             last_debt_update_time: Clock::get()?.unix_timestamp,
         });
@@ -99,46 +108,30 @@ impl<'info> OpenPosition<'info> {
             collateral_transfer_cpi_accounts,
         );
 
-        transfer(collateral_transfer_cpi_ctx, amount)?;
+        transfer(collateral_transfer_cpi_ctx, collateral_amount)?;
 
         self.collateral_vault_config
             .amount
-            .checked_add(amount)
+            .checked_add(collateral_amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        let price_update = &mut self.price_update;
-        // get_price_no_older_than will fail if the price update is more than 30 seconds old
-        let maximum_age: u64 = 30;
-        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.price_feed)?;
-        let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let accounts = MintTo {
+            mint: self.stable_mint.to_account_info(),
+            to: self.user_stable_ata.to_account_info(),
+            authority: self.auth.to_account_info(),
+        };
 
-        if usd_amount
-            <= (price.price as u64)
-                .checked_mul(10 ^ price.exponent as u64)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?
-                .checked_mul(ltv as u64)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?
-                .checked_div(10000 as u64)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?
-        {
-            let accounts = MintTo {
-                mint: self.stable_mint.to_account_info(),
-                to: self.user_stable_ata.to_account_info(),
-                authority: self.auth.to_account_info(),
-            };
+        let seeds = &[&b"auth"[..], &[auth_bump]];
 
-            let seeds = &[&b"auth"[..], &[auth_bump]];
+        let signer_seeds = &[&seeds[..]];
 
-            let signer_seeds = &[&seeds[..]];
+        let stable_mint_cpi_ctx = CpiContext::new_with_signer(
+            self.token_program.to_account_info(),
+            accounts,
+            signer_seeds,
+        );
 
-            let stable_mint_cpi_ctx = CpiContext::new_with_signer(
-                self.token_program.to_account_info(),
-                accounts,
-                signer_seeds,
-            );
-
-            mint_to(stable_mint_cpi_ctx, usd_amount)?;
-        }
+        mint_to(stable_mint_cpi_ctx, usd_amount)?;
 
         Ok(())
     }
