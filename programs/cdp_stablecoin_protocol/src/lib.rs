@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 pub mod instructions;
 pub use instructions::*;
 pub mod state;
+pub mod errors;
 
 declare_id!("BvMWoXUSWLR4udmcmPX5M9DM89kCCJJvQWvxKE55uBGH");
 
@@ -33,5 +34,7 @@ pub mod cdp_stablecoin_protocol {
         ctx.accounts.initialize_collateral_vault()
     }
 
-
+    pub fn liquidate(ctx: Context<Liquidate>) -> Result<()> {
+        instructions::liquidate::liquidate(ctx)
+    }
 }
