@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anchor_lang::prelude::*;
 
 pub const MIN_INTEREST_RATE: u16 = 100;

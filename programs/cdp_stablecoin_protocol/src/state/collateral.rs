@@ -4,8 +4,7 @@ use anchor_lang::prelude::*;
 #[derive(InitSpace)]
 pub struct CollateralConfig {
     pub mint: Pubkey,
-    #[max_len(64)]
-    pub price_feed: String,
+    pub collateral_price_feed: Pubkey,
     pub vault: Pubkey,
     pub amount: u64,
     pub bump: u8,

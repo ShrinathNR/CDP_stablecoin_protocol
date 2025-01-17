@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
+use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
 use crate::{constants::JITO_SOL, errors::CollateralError, state::CollateralConfig};
 
@@ -35,17 +36,17 @@ pub struct InitializeCollateralVault<'info> {
     vault: Account<'info, TokenAccount>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
+    collateral_price_feed: Account<'info, PriceUpdateV2>,
 }
 
 impl<'info> InitializeCollateralVault<'info> {
     pub fn initialize_collateral_vault(
         &mut self,
-        price_feed: String,
         bumps: &InitializeCollateralVaultBumps,
     ) -> Result<()> {
         self.collateral_vault_config.set_inner(CollateralConfig {
             mint: self.collateral_mint.key(),
-            price_feed,
+            collateral_price_feed: self.collateral_price_feed.key(),
             vault: self.vault.key(),
             amount: 0,
             bump: bumps.collateral_vault_config,

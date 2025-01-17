@@ -8,7 +8,7 @@ use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2
 use crate::{
     constants::MAX_LTV,
     errors::{ArithmeticError, PositionError},
-    state::{CollateralConfig, Position},
+    state::{CollateralConfig, Position, ProtocolConfig},
 };
 
 #[derive(Accounts)]
@@ -19,10 +19,11 @@ pub struct OpenPosition<'info> {
 
     collateral_mint: Account<'info, Mint>,
 
-    // #[account(
-    //     //address constraint
-    // )]
+    #[account(
+        address = protocol_config.stable_mint
+    )]
     stable_mint: Account<'info, Mint>,
+    protocol_config: Account<'info, ProtocolConfig>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         seeds = [b"auth"],
@@ -55,6 +56,10 @@ pub struct OpenPosition<'info> {
     )]
     position: Account<'info, Position>,
     #[account(
+        constraint = collateral_price_feed.key() == collateral_vault_config.collateral_price_feed
+    )]
+    collateral_price_feed: Account<'info, PriceUpdateV2>,
+    #[account(
         mut,
         seeds = [b"vault", collateral_mint.key().as_ref()],
         token::mint = collateral_mint,
@@ -62,39 +67,38 @@ pub struct OpenPosition<'info> {
         bump = collateral_vault_config.vault_bump
     )]
     vault: Account<'info, TokenAccount>,
-    price_update: Account<'info, PriceUpdateV2>,
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
     system_program: Program<'info, System>,
 }
 
 impl<'info> OpenPosition<'info> {
-    pub fn open_position(&mut self, auth_bump: u8, collateral_amount: u64, ltv: u16) -> Result<()> {
+    pub fn open_position(&mut self, auth_bump: u8, collateral_amount: u64, debt_amount: u64) -> Result<()> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
-        require!(ltv <= MAX_LTV, PositionError::InvalidLTV);
-        let price_update = &mut self.price_update;
         // get_price_no_older_than will fail if the price update is more than 30 seconds old
+        let collateral_price_feed = &mut self.collateral_price_feed;
         let maximum_age: u64 = 30;
-        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.price_feed)?;
-        let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
-        let usd_amount = (price.price as u64)
-            .checked_mul(10 ^ price.exponent as u64)
+        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed.to_string())?;
+        let price = collateral_price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let collateral_value = (price.price as u64)
+            .checked_mul(10_u64.pow(price.exponent as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_mul(collateral_amount)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_mul(ltv as u64)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(10000 as u64)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        let ltv = (debt_amount as u128)
+            .checked_mul(10000)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(collateral_value as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
+        
+        require!(ltv <= MAX_LTV, PositionError::InvalidLTV);
 
         self.position.set_inner(Position {
             user: self.user.key(),
-            mint: self.collateral_mint.key(),
             collateral_amount,
-            current_debt: usd_amount,
-            ltv,
-            // interest_rate,
-            last_debt_update_time: Clock::get()?.unix_timestamp,
+            debt_amount,
+            initial_interest_index: self.protocol_config.interest_index,
         });
 
         let collateral_transfer_cpi_accounts = Transfer {
@@ -131,7 +135,7 @@ impl<'info> OpenPosition<'info> {
             signer_seeds,
         );
 
-        mint_to(stable_mint_cpi_ctx, usd_amount)?;
+        mint_to(stable_mint_cpi_ctx, debt_amount)?;
 
         Ok(())
     }
