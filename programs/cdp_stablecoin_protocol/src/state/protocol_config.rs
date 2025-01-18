@@ -34,30 +34,16 @@ impl ProtocolConfig {
         Ok(current_debt)
     }
 
-    // this has to be a separate ix with the collateral config account passed
-    pub fn update_totals(&mut self, _debt_change: i64, _collateral_change: i64) -> Result<()> {
-        // Update total debt
-        // !!!!!!!!!!!!!!!!!!!!1
-        // if debt_change > 0 {
-        //     self.total_debt = self.total_debt
-        //         .checked_add(debt_change as u64)
-        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        // } else {
-        //     self.total_debt = self.total_debt
-        //         .checked_sub((-debt_change) as u64)
-        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        // }
-
-        // // Update total collateral
-        // if collateral_change > 0 {
-        //     self.total_collateral = self.total_collateral
-        //         .checked_add(collateral_change as u64)
-        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        // } else {
-        //     self.total_collateral = self.total_collateral
-        //         .checked_sub((-collateral_change) as u64)
-        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        // }
+    pub fn update_totals(&mut self, _debt_change: i64) -> Result<()> {
+        if _debt_change > 0 {
+            self.total_debt = self.total_debt
+                .checked_add(_debt_change as u64)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        } else {
+            self.total_debt = self.total_debt
+                .checked_sub((-_debt_change) as u64)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        }
         
         Ok(())
     }
