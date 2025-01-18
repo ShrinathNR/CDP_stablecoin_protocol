@@ -15,24 +15,53 @@ pub mod cdp_stablecoin_protocol {
         ctx: Context<InitializeProtocolConfig>,
         protocol_fee: u16,
         redemption_fee: u16,
-        global_interest_rate: u16,
         mint_fee: u16,
+        base_rate: u16,
+        sigma: u16,
+        stablecoin_price_feed: String
     ) -> Result<()> {
         ctx.accounts.initialize_protocol_config(
             protocol_fee,
             redemption_fee,
-            global_interest_rate,
             mint_fee,
+            base_rate,
+            sigma,
+            stablecoin_price_feed,
             &ctx.bumps,
         )
     }
 
     pub fn initialize_collateral_vault(
         ctx: Context<InitializeCollateralVault>,
-        price_feed: String,
+        collateral_price_feed: String,
     ) -> Result<()> {
-        ctx.accounts
-            .initialize_collateral_vault(price_feed, &ctx.bumps)
+        ctx.accounts.initialize_collateral_vault(collateral_price_feed, &ctx.bumps)
+    }
+
+    pub fn open_position(
+        ctx: Context<OpenPosition>,
+        auth_bump: u8,
+        collateral_amount: u64,
+        debt_amount: u64,
+    ) -> Result<()> {
+        ctx.accounts.open_position(
+            auth_bump,
+            collateral_amount,
+            debt_amount,
+        )
+    }
+
+    pub fn close_position(
+        ctx: Context<ClosePosition>,
+        auth_bump: u8,
+    ) -> Result<()> {
+        ctx.accounts.close_position(auth_bump)
+    }
+
+    pub fn update_interest_rate(
+        ctx: Context<UpdateInterestRate>,
+    ) -> Result<()> {
+        ctx.accounts.update_interest_rate()
     }
 
     pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> Result<()> {

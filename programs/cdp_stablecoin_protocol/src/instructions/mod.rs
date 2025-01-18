@@ -12,3 +12,6 @@ pub use open_position::*;
 
 pub mod close_position;
 pub use close_position::*;
+
+pub mod update_interest_rate;
+pub use update_interest_rate::*;
