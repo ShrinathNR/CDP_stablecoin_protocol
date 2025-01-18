@@ -12,3 +12,6 @@ pub use close_position::*;
 
 pub mod update_interest_rate;
 pub use update_interest_rate::*;
+
+pub mod stake_stability_pool;
+pub use stake_stability_pool::*;

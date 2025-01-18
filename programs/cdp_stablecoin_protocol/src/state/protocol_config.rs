@@ -19,6 +19,7 @@ pub struct ProtocolConfig {
     #[max_len(64)]
     pub stablecoin_price_feed: String,
     pub total_debt: u64,
+    pub stake_points: u64
 }
 
 impl ProtocolConfig {

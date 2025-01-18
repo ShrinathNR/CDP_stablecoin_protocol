@@ -63,4 +63,18 @@ pub mod cdp_stablecoin_protocol {
     ) -> Result<()> {
         ctx.accounts.update_interest_rate()
     }
+
+
+    pub fn stake_stable_tokens(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        // Check if the user is the owner of the stake account
+        if ctx.accounts.stake_account.user == ctx.accounts.user.key() {
+            ctx.accounts.deposit_tokens(amount)
+        } else {
+            ctx.accounts.init_stake_account(amount, &ctx.bumps)
+        }
+    }
+
+    pub fn unstake_stable_tokens(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        ctx.accounts.withdraw_tokens(amount, &ctx.bumps)
+    }
 }
