@@ -39,16 +39,23 @@ impl<'info> InitializeProtocolConfig<'info> {
         protocol_fee: u16,
         redemption_fee: u16,
         mint_fee: u16,
-        global_interest_rate: u16,
+        base_rate: u16,
+        sigma: u16,
+        stablecoin_price_feed: String,
         bumps: &InitializeProtocolConfigBumps,
     ) -> Result<()> {
         self.protocol_config.set_inner(ProtocolConfig {
             stable_mint: self.stable_mint.key(),
             protocol_fee,
             redemption_fee,
-            global_interest_rate,
             mint_fee,
+            base_rate,
+            sigma,
             auth_bump: bumps.auth,
+            interest_index: ProtocolConfig::INITIAL_INTEREST_INDEX,
+            stablecoin_price_feed, 
+            last_index_update: Clock::get()?.unix_timestamp,
+            total_debt: 0
         });
 
         Ok(())
