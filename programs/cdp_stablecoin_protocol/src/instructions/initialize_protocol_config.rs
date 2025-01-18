@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token};
-use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
 use crate::state::ProtocolConfig;
 
@@ -32,7 +31,6 @@ pub struct InitializeProtocolConfig<'info> {
     auth: UncheckedAccount<'info>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
-    stablecoin_price_feed: Account<'info, PriceUpdateV2>,
 }
 
 impl<'info> InitializeProtocolConfig<'info> {
@@ -43,6 +41,7 @@ impl<'info> InitializeProtocolConfig<'info> {
         mint_fee: u16,
         base_rate: u16,
         sigma: u16,
+        stablecoin_price_feed: String,
         bumps: &InitializeProtocolConfigBumps,
     ) -> Result<()> {
         self.protocol_config.set_inner(ProtocolConfig {
@@ -54,10 +53,9 @@ impl<'info> InitializeProtocolConfig<'info> {
             sigma,
             auth_bump: bumps.auth,
             interest_index: ProtocolConfig::INITIAL_INTEREST_INDEX,
+            stablecoin_price_feed, 
             last_index_update: Clock::get()?.unix_timestamp,
-            stablecoin_price_feed: self.stablecoin_price_feed.key(),
-            total_debt: 0,
-            total_collateral: 0,
+            total_debt: 0
         });
 
         Ok(())

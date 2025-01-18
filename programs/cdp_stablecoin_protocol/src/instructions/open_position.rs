@@ -55,10 +55,10 @@ pub struct OpenPosition<'info> {
         bump
     )]
     position: Account<'info, Position>,
-    #[account(
-        constraint = collateral_price_feed.key() == collateral_vault_config.collateral_price_feed
-    )]
-    collateral_price_feed: Account<'info, PriceUpdateV2>,
+    // #[account(
+    //     // owner = 
+    // )]
+    price_feed: Account<'info, PriceUpdateV2>,
     #[account(
         mut,
         seeds = [b"vault", collateral_mint.key().as_ref()],
@@ -76,10 +76,10 @@ impl<'info> OpenPosition<'info> {
     pub fn open_position(&mut self, auth_bump: u8, collateral_amount: u64, debt_amount: u64) -> Result<()> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         // get_price_no_older_than will fail if the price update is more than 30 seconds old
-        let collateral_price_feed = &mut self.collateral_price_feed;
+        let price_feed = &mut self.price_feed;
         let maximum_age: u64 = 30;
-        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed.to_string())?;
-        let price = collateral_price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
+        let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
         let collateral_value = (price.price as u64)
             .checked_mul(10_u64.pow(price.exponent as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?

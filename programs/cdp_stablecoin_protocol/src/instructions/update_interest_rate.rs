@@ -2,28 +2,19 @@ use anchor_lang::prelude::*;
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 use crate::{
     state::ProtocolConfig,
-    errors::ArithmeticError
+    errors::ArithmeticError,
+    constants::{MIN_RATE_BPS, MAX_RATE_BPS, PRICE_SCALE, INTEREST_SCALE, BPS_SCALE, YEAR_IN_SECONDS}
 };
-
-// Interest rate limits in basis points
-const MIN_RATE_BPS: u16 = 100;   // 1% APR
-const MAX_RATE_BPS: u16 = 3000;  // 30% APR
-
-// Fixed point scale factors
-const PRICE_SCALE: u64 = 1_000_000;  // 6 decimals for price (1.0 = 1_000_000)
-const INTEREST_SCALE: u64 = 1_000_000_000;   // 9 decimals for interest (1.0 = 1_000_000_000)
-const BPS_SCALE: u64 = 10_000;               // Basis points scale (100% = 10000 bps)
-const YEAR_IN_SECONDS: u64 = 365 * 24 * 60 * 60;  // 365 days * 24 hours * 60 minutes * 60 seconds
 
 #[derive(Accounts)]
 pub struct UpdateInterestRate<'info> {
     #[account(mut)]
     pub protocol_config: Account<'info, ProtocolConfig>,
     
-    #[account(
-        constraint = stablecoin_price_feed.key() == protocol_config.stablecoin_price_feed
-    )]
-    pub stablecoin_price_feed: Account<'info, PriceUpdateV2>,
+    // #[account(
+    //     // owner = 
+    // )]
+    pub price_feed: Account<'info, PriceUpdateV2>,
 }
 
 impl<'info> UpdateInterestRate<'info> {
@@ -31,10 +22,10 @@ impl<'info> UpdateInterestRate<'info> {
         let current_timestamp = Clock::get()?.unix_timestamp;
         
         // Get current stablecoin price
-        let stablecoin_price_feed = &mut self.stablecoin_price_feed;
+        let price_feed = &mut self.price_feed;
         let maximum_age: u64 = 30;
-        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.protocol_config.stablecoin_price_feed.to_string())?;
-        let price = stablecoin_price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.protocol_config.stablecoin_price_feed)?;
+        let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
         
         // Convert price to fixed point with 6 decimals (following Pyth docs https://docs.pyth.network/price-feeds/best-practices)
         let stablecoin_price = (price.price as u64)

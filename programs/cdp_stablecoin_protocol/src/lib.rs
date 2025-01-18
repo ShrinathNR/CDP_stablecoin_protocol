@@ -18,6 +18,7 @@ pub mod cdp_stablecoin_protocol {
         mint_fee: u16,
         base_rate: u16,
         sigma: u16,
+        stablecoin_price_feed: String
     ) -> Result<()> {
         ctx.accounts.initialize_protocol_config(
             protocol_fee,
@@ -25,14 +26,16 @@ pub mod cdp_stablecoin_protocol {
             mint_fee,
             base_rate,
             sigma,
+            stablecoin_price_feed,
             &ctx.bumps,
         )
     }
 
     pub fn initialize_collateral_vault(
         ctx: Context<InitializeCollateralVault>,
+        collateral_price_feed: String,
     ) -> Result<()> {
-        ctx.accounts.initialize_collateral_vault(&ctx.bumps)
+        ctx.accounts.initialize_collateral_vault(collateral_price_feed, &ctx.bumps)
     }
 
     pub fn open_position(

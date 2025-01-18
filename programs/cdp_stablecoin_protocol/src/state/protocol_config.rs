@@ -16,9 +16,9 @@ pub struct ProtocolConfig {
     pub auth_bump: u8,
     pub interest_index: u64,
     pub last_index_update: i64,
-    pub stablecoin_price_feed: Pubkey,
+    #[max_len(64)]
+    pub stablecoin_price_feed: String,
     pub total_debt: u64,
-    pub total_collateral: u64,
 }
 
 impl ProtocolConfig {
@@ -36,26 +36,27 @@ impl ProtocolConfig {
 
     pub fn update_totals(&mut self, debt_change: i64, collateral_change: i64) -> Result<()> {
         // Update total debt
-        if debt_change > 0 {
-            self.total_debt = self.total_debt
-                .checked_add(debt_change as u64)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        } else {
-            self.total_debt = self.total_debt
-                .checked_sub((-debt_change) as u64)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        }
+        // !!!!!!!!!!!!!!!!!!!!1
+        // if debt_change > 0 {
+        //     self.total_debt = self.total_debt
+        //         .checked_add(debt_change as u64)
+        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        // } else {
+        //     self.total_debt = self.total_debt
+        //         .checked_sub((-debt_change) as u64)
+        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        // }
 
-        // Update total collateral
-        if collateral_change > 0 {
-            self.total_collateral = self.total_collateral
-                .checked_add(collateral_change as u64)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        } else {
-            self.total_collateral = self.total_collateral
-                .checked_sub((-collateral_change) as u64)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        }
+        // // Update total collateral
+        // if collateral_change > 0 {
+        //     self.total_collateral = self.total_collateral
+        //         .checked_add(collateral_change as u64)
+        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        // } else {
+        //     self.total_collateral = self.total_collateral
+        //         .checked_sub((-collateral_change) as u64)
+        //         .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        // }
         
         Ok(())
     }

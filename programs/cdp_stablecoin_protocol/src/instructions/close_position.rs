@@ -54,14 +54,13 @@ pub struct ClosePosition<'info> {
         close = user,
         seeds = [b"position", user.key().as_ref(), collateral_mint.key().as_ref()],
         bump,
-        has_one = user
     )]
     position: Account<'info, Position>,
 
-    #[account(
-        constraint = collateral_price_feed.key() == collateral_vault_config.collateral_price_feed
-    )]
-    collateral_price_feed: Account<'info, PriceUpdateV2>,
+    // #[account(
+    //     // owner = 
+    // )]
+    price_update: Account<'info, PriceUpdateV2>,
 
     #[account(
         mut,
@@ -107,10 +106,10 @@ impl<'info> ClosePosition<'info> {
         // Calculate current debt with accrued interest
         let current_debt = self.protocol_config.calculate_current_debt(&self.position)?;
 
-        let collateral_price_feed = &mut self.collateral_price_feed;
+        let price_update = &mut self.price_update;
         let maximum_age: u64 = 30;
-        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed.to_string())?;
-        let price = collateral_price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
+        let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
 
         let collateral_value = (price.price as u64)
             .checked_mul(10_u64.pow(price.exponent as u32))
@@ -136,10 +135,11 @@ impl<'info> ClosePosition<'info> {
             burn(stable_burn_cpi_ctx, current_debt)?;  // Use current_debt with accrued interest
 
             // Update protocol totals
-            self.protocol_config.update_totals(
-                -(current_debt as i64),
-                -(self.position.collateral_amount as i64),
-            )?;
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!1
+            // self.protocol_config.update_totals(
+            //     -(current_debt as i64),
+            //     -(self.position.collateral_amount as i64),
+            // )?;
         } else {
             return err!(PositionError::InvalidLTV);
         }
