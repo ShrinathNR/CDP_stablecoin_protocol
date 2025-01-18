@@ -56,6 +56,8 @@ impl<'info> InitializeProtocolConfig<'info> {
             interest_index: ProtocolConfig::INITIAL_INTEREST_INDEX,
             last_index_update: Clock::get()?.unix_timestamp,
             stablecoin_price_feed: self.stablecoin_price_feed.key(),
+            total_debt: 0,
+            total_collateral: 0,
         });
 
         Ok(())

@@ -133,8 +133,13 @@ impl<'info> ClosePosition<'info> {
 
             let stable_burn_cpi_ctx =
                 CpiContext::new(self.token_program.to_account_info(), accounts);
-
             burn(stable_burn_cpi_ctx, current_debt)?;  // Use current_debt with accrued interest
+
+            // Update protocol totals
+            self.protocol_config.update_totals(
+                -(current_debt as i64),
+                -(self.position.collateral_amount as i64),
+            )?;
         } else {
             return err!(PositionError::InvalidLTV);
         }

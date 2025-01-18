@@ -2,15 +2,17 @@ use anchor_lang::prelude::*;
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 use crate::{
     state::ProtocolConfig,
-    errors::ArithmeticError,
+    errors::ArithmeticError
 };
 
 // Interest rate limits in basis points
 const MIN_RATE_BPS: u16 = 100;   // 1% APR
 const MAX_RATE_BPS: u16 = 3000;  // 30% APR
 
-// Fixed point scale factors ?? NOT SURE PLS CHECK
+// Fixed point scale factors
 const PRICE_SCALE: u64 = 1_000_000;  // 6 decimals for price (1.0 = 1_000_000)
+const INTEREST_SCALE: u64 = 1_000_000_000;   // 9 decimals for interest (1.0 = 1_000_000_000)
+const BPS_SCALE: u64 = 10_000;               // Basis points scale (100% = 10000 bps)
 const YEAR_IN_SECONDS: u64 = 365 * 24 * 60 * 60;  // 365 days * 24 hours * 60 minutes * 60 seconds
 
 #[derive(Accounts)]
@@ -45,29 +47,29 @@ impl<'info> UpdateInterestRate<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
         
         // TODO THIS IS USING FLOATING POINT STUFF. NO GOOD ?? HOW TO DO EXP FUNCTION IN ANCHOR ??
-        let base_rate = self.protocol_config.base_rate as f64 / 10000.0;  // Convert from bps to float
-        let sigma = self.protocol_config.sigma as f64 / 10000.0;  // Convert from bps to float
+        let base_rate = self.protocol_config.base_rate as f64 / BPS_SCALE as f64;  // Convert from bps to float
+        let sigma = self.protocol_config.sigma as f64 / BPS_SCALE as f64;  // Convert from bps to float
         let deviation = price_deviation as f64 / PRICE_SCALE as f64;
         
         let power = deviation / sigma;
         let new_rate = base_rate * power.exp();
         
         // Convert back to bps and clamp
-        let new_rate_bps = (new_rate * 10000.0) as u16;
+        let new_rate_bps = (new_rate * BPS_SCALE as f64) as u16;
         let new_rate_bps = new_rate_bps.clamp(MIN_RATE_BPS, MAX_RATE_BPS);
         
         // Calculate time elapsed
         let time_elapsed = (current_timestamp - self.protocol_config.last_index_update) as u64;
         
         // multiplier = 1 + (rate * time / YEAR_IN_SECONDS)
-        let interest_multiplier = (PRICE_SCALE as u128)
+        let interest_multiplier = (INTEREST_SCALE as u128)
             .checked_add(
                 (new_rate_bps as u128)
                     .checked_mul(time_elapsed as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
-                    .checked_mul(PRICE_SCALE as u128)
+                    .checked_mul(INTEREST_SCALE as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
-                    .checked_div(10000)  // Convert from bps
+                    .checked_div(BPS_SCALE as u128)  // Convert from bps
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
                     .checked_div(YEAR_IN_SECONDS as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
@@ -78,9 +80,17 @@ impl<'info> UpdateInterestRate<'info> {
         let new_index = (self.protocol_config.interest_index as u128)
             .checked_mul(interest_multiplier)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(PRICE_SCALE as u128)
+            .checked_div(INTEREST_SCALE as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
             
+        // Update total debt
+        self.protocol_config.total_debt = (self.protocol_config.total_debt as u128)
+            .checked_mul(interest_multiplier)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(INTEREST_SCALE as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
+            
+        // Update state
         self.protocol_config.interest_index = new_index;
         self.protocol_config.base_rate = new_rate_bps;
         self.protocol_config.last_index_update = current_timestamp;

@@ -114,10 +114,15 @@ impl<'info> OpenPosition<'info> {
 
         transfer(collateral_transfer_cpi_ctx, collateral_amount)?;
 
-        self.collateral_vault_config.amount =self.collateral_vault_config
+        self.collateral_vault_config.amount = self.collateral_vault_config
             .amount
             .checked_add(collateral_amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        self.protocol_config.update_totals(
+            debt_amount as i64,
+            collateral_amount as i64,
+        )?;
 
         let accounts = MintTo {
             mint: self.stable_mint.to_account_info(),
