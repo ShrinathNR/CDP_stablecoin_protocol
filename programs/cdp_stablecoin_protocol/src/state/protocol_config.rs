@@ -34,7 +34,8 @@ impl ProtocolConfig {
         Ok(current_debt)
     }
 
-    pub fn update_totals(&mut self, debt_change: i64, collateral_change: i64) -> Result<()> {
+    // this has to be a separate ix with the collateral config account passed
+    pub fn update_totals(&mut self, _debt_change: i64, _collateral_change: i64) -> Result<()> {
         // Update total debt
         // !!!!!!!!!!!!!!!!!!!!1
         // if debt_change > 0 {

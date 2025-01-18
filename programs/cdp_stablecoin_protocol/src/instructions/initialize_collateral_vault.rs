@@ -1,8 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
-use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
-use crate::{constants::JITO_SOL, errors::CollateralError, state::CollateralConfig};
+use crate::state::CollateralConfig;
 
 #[derive(Accounts)]
 #[instruction(auth_bump: u8)]
