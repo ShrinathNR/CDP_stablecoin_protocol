@@ -35,7 +35,7 @@ pub mod cdp_stablecoin_protocol {
             .initialize_collateral_vault(price_feed, &ctx.bumps)
     }
 
-    pub fn liquidate(ctx: Context<Liquidate>) -> Result<()> {
-        instructions::liquidate::liquidate(ctx)
+    pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> Result<()> {
+        instructions::liquidate::liquidate(ctx, liquidation_type)
     }
 }

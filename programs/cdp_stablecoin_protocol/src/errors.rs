@@ -29,4 +29,6 @@ pub enum CollateralError {
 pub enum ArithmeticError {
     #[msg("Arithmetic Overflow")]
     ArithmeticOverflow,
+    #[msg("Arithmetic operation failed")]    
+    ArithmeticOperationError,
 }
