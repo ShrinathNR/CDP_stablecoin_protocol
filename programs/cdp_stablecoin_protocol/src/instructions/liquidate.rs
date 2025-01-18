@@ -1,7 +1,7 @@
 // src/instructions/liquidate.rs
 use anchor_lang::prelude::*;
 use crate::state::{ProtocolState, UserPosition};
-use crate::errors::CustomError;
+use crate::errors::LiquidationError;
 
 #[derive(Accounts)]
 pub struct Liquidate<'info> {
