@@ -6,3 +6,6 @@ pub use collateral::*;
 
 pub mod protocol_state;
 pub use protocol_state::*;
+
+pub mod position;
+pub use position::*;

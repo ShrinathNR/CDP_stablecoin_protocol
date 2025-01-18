@@ -1,7 +1,5 @@
 // src/instructions/liquidate.rs
 use anchor_lang::prelude::*;
-// use crate::state::ProtocolConfig;
-// use crate::state::UserPosition;
 use crate::state::{ProtocolState, UserPosition};
 use crate::errors::CustomError;
 
@@ -29,10 +27,10 @@ pub fn liquidate(ctx: Context<Liquidate>) -> Result<()> {
         // Update total collateral in protocol state
         let protocol_state = &mut ctx.accounts.protocol_config;
         protocol_state.total_collateral = protocol_state.total_collateral.checked_sub(liquidated_amount)
-            .ok_or(CustomError::InsufficientCollateral)?;
+            .ok_or(LiquidationError::InsufficientCollateral)?;
         
         Ok(())
     } else {
-        Err(CustomError::LiquidationThresholdNotReached.into())
+        Err(LiquidationError::LiquidationThresholdNotReached.into())
     }
 }
