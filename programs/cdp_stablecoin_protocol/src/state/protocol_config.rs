@@ -14,6 +14,7 @@ pub struct ProtocolConfig {
     pub base_rate: u16,
     pub sigma: u16,
     pub auth_bump: u8,
+    pub bump: u8,
     pub interest_index: u64,
     pub last_index_update: i64,
     #[max_len(64)]

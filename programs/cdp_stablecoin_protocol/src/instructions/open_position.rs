@@ -23,6 +23,11 @@ pub struct OpenPosition<'info> {
         address = protocol_config.stable_mint
     )]
     stable_mint: Account<'info, Mint>,
+    #[account(
+        mut,
+        seeds = [b"config"],
+        bump
+    )]
     protocol_config: Account<'info, ProtocolConfig>,
     /// CHECK: This is an auth acc for the vault
     #[account(

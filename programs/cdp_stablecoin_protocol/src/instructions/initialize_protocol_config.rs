@@ -18,9 +18,11 @@ pub struct InitializeProtocolConfig<'info> {
     #[account(
         init,
         payer = admin,
+        seeds = [b"stable"],
         mint::decimals = 6,
         mint::authority = auth,
-        mint::token_program = token_program
+        mint::token_program = token_program,
+        bump
     )]
     stable_mint: Account<'info, Mint>,
     /// CHECK: This is an auth acc for the vault
@@ -52,6 +54,7 @@ impl<'info> InitializeProtocolConfig<'info> {
             base_rate,
             sigma,
             auth_bump: bumps.auth,
+            bump: bumps.protocol_config,
             interest_index: ProtocolConfig::INITIAL_INTEREST_INDEX,
             stablecoin_price_feed, 
             last_index_update: Clock::get()?.unix_timestamp,
