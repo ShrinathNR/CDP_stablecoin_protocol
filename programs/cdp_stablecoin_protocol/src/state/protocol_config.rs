@@ -22,6 +22,15 @@ pub struct ProtocolConfig {
     pub stake_points: u64
 }
 
+#[account]
+pub struct ProtocolState {
+    pub total_collateral: u64,
+    pub total_stablecoin: u64,
+    pub collateral_ratio: u64,
+    pub liquidation_threshold: u64,
+    pub price_feed_id: String,
+}
+
 impl ProtocolConfig {
     pub const INITIAL_INTEREST_INDEX: u64 = 1_000_000;
 
