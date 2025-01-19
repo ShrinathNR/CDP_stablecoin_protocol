@@ -14,3 +14,8 @@ pub const INTEREST_SCALE: u64 = 1_000_000_000;   // 9 decimals for interest (1.0
 pub const BPS_SCALE: u64 = 10_000;               // Basis points scale (100% = 10000 bps)
 pub const PRICE_SCALE: u64 = 1_000_000;  // 6 decimals for price (1.0 = 1_000_000)
 pub const YEAR_IN_SECONDS: u64 = 365 * 24 * 60 * 60;  // 365 days * 24 hours * 60 minutes * 60 seconds
+
+// Liquidation params
+pub const LIQUIDATION_THRESHOLD: u64 = 8000; // 80% LTV
+pub const LIQUIDATION_SPREAD: u64 = 500; // buffer/spread 5%
+pub const LIQUIDATION_BONUS: u64 = 500; // bonus 5%

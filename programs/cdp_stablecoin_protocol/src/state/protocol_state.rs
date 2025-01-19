@@ -7,6 +7,7 @@ pub struct ProtocolState {
     pub total_stablecoin: u64,
     pub collateral_ratio: u64,
     pub liquidation_threshold: u64,
+    pub price_feed_id: String,
 }
 
 #[account]
