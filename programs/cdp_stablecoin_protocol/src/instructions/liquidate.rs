@@ -7,7 +7,7 @@ use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2
 use crate::{
     constants::{PRICE_SCALE, LIQUIDATION_THRESHOLD, LIQUIDATION_BONUS, LIQUIDATION_SPREAD},
     errors::{ArithmeticError, LiquidationError},
-    state::{ProtocolState, UserPosition},
+    state::{ProtocolConfig, ProtocolState, Position},
 };
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
@@ -21,7 +21,7 @@ pub struct Liquidate<'info> {
     #[account(mut)]
     pub protocol_state: Account<'info, ProtocolState>,
     #[account(mut)]
-    pub user_position: Account<'info, UserPosition>,
+    pub position: Account<'info, Position>,
     
     #[account(mut)]
     pub liquidator: Signer<'info>,
@@ -33,7 +33,7 @@ pub struct Liquidate<'info> {
 }
 
 pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> Result<()> {
-    let user_position = &mut ctx.accounts.user_position;
+    let position = &mut ctx.accounts.position;
     let protocol_state = &mut ctx.accounts.protocol_state;
 
     // Fetch the current price from Pyth oracle
@@ -43,14 +43,14 @@ pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> 
     let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
    
     // Calculate the current collateral value
-        let collateral_value = user_position.collateral_amount
+        let collateral_value = position.collateral_amount
         .checked_mul(price.price.try_into().unwrap())
         .ok_or(ArithmeticError::ArithmeticOverflow)?
         .checked_div(10u64.pow(price.exponent as u32))
         .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
     // Calculate the current LTV
-    let ltv = user_position.debt_amount
+    let ltv = position.debt_amount
         .checked_mul(PRICE_SCALE)
         .ok_or(ArithmeticError::ArithmeticOverflow)?
         .checked_div(collateral_value)
@@ -62,20 +62,20 @@ pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> 
     }
 
     match liquidation_type {
-        LiquidationType::Soft => soft_liquidate(user_position, protocol_state, price.price.try_into().unwrap())?,
-        LiquidationType::Hard => hard_liquidate(user_position, protocol_state)?,
+        LiquidationType::Soft => soft_liquidate(position, protocol_state, price.price.try_into().unwrap())?,
+        LiquidationType::Hard => hard_liquidate(position, protocol_state)?,
     }
 
-    update_state(user_position, protocol_state)?;
+    update_state(position, protocol_state)?;
 
     Ok(())
 }
 
-fn soft_liquidate(user_position: &mut UserPosition, protocol_state: &mut ProtocolState, current_price: u64) -> Result<()> {
+fn soft_liquidate(position: &mut Position, protocol_state: &mut ProtocolState, current_price: u64) -> Result<()> {
     let target_ratio = protocol_state.liquidation_threshold.checked_add(LIQUIDATION_SPREAD).ok_or(ArithmeticError::ArithmeticOverflow)?; // 5% buffer
-    let collateral_to_liquidate = calculate_collateral_to_liquidate(user_position, target_ratio, current_price)?;
+    let collateral_to_liquidate = calculate_collateral_to_liquidate(position, target_ratio, current_price)?;
 
-    user_position.collateral_amount = user_position.collateral_amount
+    position.collateral_amount = position.collateral_amount
     .checked_sub(collateral_to_liquidate)
     .ok_or(LiquidationError::InsufficientCollateral)?;
 
@@ -87,12 +87,12 @@ protocol_state.total_collateral = protocol_state.total_collateral
     Ok(())
 }
 
-fn hard_liquidate(user_position: &mut UserPosition, protocol_state: &mut ProtocolState) -> Result<()> {
-    let liquidated_amount = user_position.collateral_amount;
-    let debt_amount = user_position.debt_amount;
+fn hard_liquidate(position: &mut Position, protocol_state: &mut ProtocolState) -> Result<()> {
+    let liquidated_amount = position.collateral_amount;
+    let debt_amount = position.debt_amount;
 
-    user_position.collateral_amount = 0;
-    user_position.debt_amount = 0;
+    position.collateral_amount = 0;
+    position.debt_amount = 0;
 
     protocol_state.total_collateral = protocol_state.total_collateral
         .checked_sub(liquidated_amount)
@@ -115,7 +115,7 @@ fn hard_liquidate(user_position: &mut UserPosition, protocol_state: &mut Protoco
     // and burn corresponding stablecoins
 
     emit!(HardLiquidationEvent {
-        user: user_position.owner,
+        user: position.user,
         liquidated_amount,
         debt_amount,
         liquidator_receives,
@@ -125,17 +125,17 @@ fn hard_liquidate(user_position: &mut UserPosition, protocol_state: &mut Protoco
 }
 
 fn calculate_collateral_to_liquidate(
-    user_position: &UserPosition,
+    position: &Position,
     target_ratio: u64,
     current_price: u64,
 ) -> Result<u64> {
-    let current_collateral_value = user_position.collateral_amount
+    let current_collateral_value = position.collateral_amount
         .checked_mul(current_price)
         .ok_or(ArithmeticError::ArithmeticOverflow)?
         .checked_div(PRICE_SCALE)
         .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-    let target_collateral_value = user_position.debt_amount
+    let target_collateral_value = position.debt_amount
         .checked_mul(target_ratio)
         .ok_or(ArithmeticError::ArithmeticOverflow)?
         .checked_div(100)
@@ -159,16 +159,16 @@ fn calculate_collateral_to_liquidate(
 }
 
 
-fn update_state(user_position: &mut UserPosition, protocol_state: &mut ProtocolState) -> Result<()> {
+fn update_state(position: &mut Position, protocol_state: &mut ProtocolState) -> Result<()> {
     protocol_state.total_collateral = protocol_state.total_collateral
-        .checked_sub(user_position.collateral_amount)
+        .checked_sub(position.collateral_amount)
         .ok_or(LiquidationError::InsufficientCollateral)?;
 
     protocol_state.total_stablecoin = protocol_state.total_stablecoin
-        .checked_sub(user_position.debt_amount)
+        .checked_sub(position.debt_amount)
         .ok_or(LiquidationError::InsufficientCollateral)?;
 
-    if user_position.collateral_amount == 0 && user_position.debt_amount == 0 {
+    if position.collateral_amount == 0 && position.debt_amount == 0 {
         // Close the position if it's empty
     }
 
