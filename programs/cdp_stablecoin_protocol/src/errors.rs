@@ -32,3 +32,15 @@ pub enum ArithmeticError {
     #[msg("Arithmetic operation failed")]    
     ArithmeticOperationError,
 }
+
+#[error_code]
+pub enum StakeError {
+    #[msg("Insufficient funds")]
+    InsufficientFunds,
+    #[msg("Invalid amount")]
+    InvalidAmount,
+    #[msg("Stake account already exists")]
+    StakeAccountExists,
+    #[msg("Stake account not found")]
+    StakeAccountNotFound,
+}

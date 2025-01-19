@@ -9,3 +9,6 @@ pub use protocol_state::*;
 
 pub mod position;
 pub use position::*;
+
+pub mod stake;
+pub use stake::*;

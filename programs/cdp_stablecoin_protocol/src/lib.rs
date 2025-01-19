@@ -67,4 +67,17 @@ pub mod cdp_stablecoin_protocol {
     pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> Result<()> {
         instructions::liquidate::liquidate(ctx, liquidation_type)
     }
+
+    pub fn stake_stable_tokens(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        // Check if the user is the owner of the stake account
+        if ctx.accounts.stake_account.user == ctx.accounts.user.key() {
+            ctx.accounts.deposit_tokens(amount)
+        } else {
+            ctx.accounts.init_stake_account(amount, &ctx.bumps)
+        }
+    }
+
+    pub fn unstake_stable_tokens(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        ctx.accounts.withdraw_tokens(amount, &ctx.bumps)
+    }
 }
