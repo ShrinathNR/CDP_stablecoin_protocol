@@ -18,11 +18,9 @@ pub struct InitializeProtocolConfig<'info> {
     #[account(
         init,
         payer = admin,
-        seeds = [b"stable"],
         mint::decimals = 6,
         mint::authority = auth,
         mint::token_program = token_program,
-        bump
     )]
     stable_mint: Account<'info, Mint>,
     /// CHECK: This is an auth acc for the vault

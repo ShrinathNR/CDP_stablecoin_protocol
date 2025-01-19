@@ -55,12 +55,13 @@ describe("cdp_stablecoin_protocol", () => {
     program.programId
   )[0];
 
-  const stableMint = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("stable"),
-    ],
-    program.programId
-  )[0];
+  // const stableMint = anchor.web3.PublicKey.findProgramAddressSync(
+  //   [
+  //     Buffer.from("stable"),
+  //   ],
+  //   program.programId
+  // )[0];
+  const stableMint = Keypair.generate()
 
   it("Create Collateral Mint and mint tokens", async() => {
     collateralMint = await createMint(provider.connection, wallet.payer, wallet.publicKey, wallet.publicKey, 6);
@@ -87,10 +88,10 @@ describe("cdp_stablecoin_protocol", () => {
       admin: wallet.publicKey,
       protocolConfig,
       auth,
-      stableMint,
+      stableMint: stableMint.publicKey,
 
     })
-    .signers([wallet.payer])
+    .signers([wallet.payer, stableMint])
     .rpc()
     .then(confirm);
     console.log("Your transaction signature", tx);
