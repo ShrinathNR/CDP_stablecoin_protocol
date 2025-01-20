@@ -6,7 +6,6 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
-
 use crate::{
     constants::{PRICE_SCALE, LIQUIDATION_THRESHOLD, LIQUIDATION_BONUS, LIQUIDATION_SPREAD},
     errors::{ArithmeticError, LiquidationError},
