@@ -40,12 +40,10 @@ pub mod cdp_stablecoin_protocol {
 
     pub fn open_position(
         ctx: Context<OpenPosition>,
-        auth_bump: u8,
         collateral_amount: u64,
         debt_amount: u64,
     ) -> Result<()> {
         ctx.accounts.open_position(
-            auth_bump,
             collateral_amount,
             debt_amount,
         )

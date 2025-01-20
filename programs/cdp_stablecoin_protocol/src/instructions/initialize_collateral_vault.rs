@@ -1,10 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::state::CollateralConfig;
+use crate::state::{CollateralConfig, ProtocolConfig};
 
 #[derive(Accounts)]
-#[instruction(auth_bump: u8)]
 pub struct InitializeCollateralVault<'info> {
     #[account(mut)]
     admin: Signer<'info>,
@@ -18,10 +17,17 @@ pub struct InitializeCollateralVault<'info> {
         bump
     )]
     collateral_vault_config: Account<'info, CollateralConfig>,
+
+    #[account(
+        mut,
+        seeds = [b"config"],
+        bump = protocol_config.bump
+    )]
+    protocol_config: Account<'info, ProtocolConfig>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         seeds = [b"auth"],
-        bump = auth_bump
+        bump = protocol_config.auth_bump
     )]
     auth: UncheckedAccount<'info>,
     #[account(
@@ -32,7 +38,7 @@ pub struct InitializeCollateralVault<'info> {
         token::authority = auth,
         bump
     )]
-    vault: Account<'info, TokenAccount>,
+    collateral_vault: Account<'info, TokenAccount>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
 }
@@ -46,10 +52,10 @@ impl<'info> InitializeCollateralVault<'info> {
         self.collateral_vault_config.set_inner(CollateralConfig {
             mint: self.collateral_mint.key(),
             collateral_price_feed,
-            vault: self.vault.key(),
+            vault: self.collateral_vault.key(),
             amount: 0,
             bump: bumps.collateral_vault_config,
-            vault_bump: bumps.vault,
+            vault_bump: bumps.collateral_vault,
         });
 
         Ok(())
