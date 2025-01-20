@@ -1,8 +1,8 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
+import { Program, BN } from "@coral-xyz/anchor";
 import { CdpStablecoinProtocol } from "../target/types/cdp_stablecoin_protocol";
 import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
-import { Keypair,SystemProgram, Commitment, PublicKey } from "@solana/web3.js";
+import { Keypair,SystemProgram, Commitment, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, Account, TOKEN_PROGRAM_ID, createMint, getAssociatedTokenAddressSync, getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
 const protocolFee = 500;
 const redemptionFee = 500;
@@ -11,6 +11,8 @@ const baseRate = 100;
 const sigma = 20;
 const stablecoinPriceFeed = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
 const collateralPriceFeed = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb"
+const collateralAmount = new BN(0.1*LAMPORTS_PER_SOL);
+const debtAmount = new BN(1);
 
 
 
@@ -22,8 +24,10 @@ describe("cdp_stablecoin_protocol", () => {
 
   const program = anchor.workspace.CdpStablecoinProtocol as Program<CdpStablecoinProtocol>;
 
-  let collateralMint: anchor.web3.PublicKey;
+  let collateralMint: PublicKey;
   let collateralAccount: Account;
+  let collateralVaultConfig: PublicKey;
+  let collateralVault: PublicKey;
 
 
   const confirm = async (signature: string): Promise<string> => {
@@ -71,6 +75,21 @@ describe("cdp_stablecoin_protocol", () => {
 
     const tx = await mintTo(provider.connection, wallet.payer, collateralMint, collateralAccount.address, wallet.payer, 1000000000);
 
+    collateralVaultConfig = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("collateral"),
+        collateralMint.toBuffer()
+      ],
+      program.programId
+    )[0];
+    collateralVault = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("vault"),
+        collateralMint.toBuffer()
+      ],
+      program.programId
+    )[0];
+
   });
 
   it("Initialize Protocol Config", async () => {
@@ -97,25 +116,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-
-  
-
-
   it("Initialize Collateral Config", async () => {
-    const collateralVaultConfig = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("collateral"),
-        collateralMint.toBuffer()
-      ],
-      program.programId
-    )[0];
-    const collateralVault = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("vault"),
-        collateralMint.toBuffer()
-      ],
-      program.programId
-    )[0];
 
     // Add your test here.
     const tx = await program.methods.initializeCollateralVault(
@@ -134,4 +135,27 @@ describe("cdp_stablecoin_protocol", () => {
     .then(confirm);
     console.log("Your transaction signature", tx);
   });
+
+  xit("Open position", async () => {
+    
+
+    // Add your test here.
+    const tx = await program.methods.openPosition(
+      collateralAmount,
+      debtAmount
+    )
+    .accountsPartial({
+      user: wallet.publicKey,
+      collateralMint,
+      collateralVaultConfig,
+      protocolConfig,
+      auth,
+      collateralVault,
+    })
+    .signers([wallet.payer])
+    .rpc()
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
 });

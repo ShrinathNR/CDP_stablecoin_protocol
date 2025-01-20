@@ -12,7 +12,6 @@ use crate::{
 };
 
 #[derive(Accounts)]
-#[instruction(auth_bump: u8)]
 pub struct OpenPosition<'info> {
     #[account(mut)]
     user: Signer<'info>,
@@ -26,13 +25,13 @@ pub struct OpenPosition<'info> {
     #[account(
         mut,
         seeds = [b"config"],
-        bump
+        bump = protocol_config.bump
     )]
     protocol_config: Account<'info, ProtocolConfig>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         seeds = [b"auth"],
-        bump = auth_bump
+        bump = protocol_config.auth_bump
     )]
     auth: UncheckedAccount<'info>,
     #[account(
@@ -71,14 +70,14 @@ pub struct OpenPosition<'info> {
         token::authority = auth,
         bump = collateral_vault_config.vault_bump
     )]
-    vault: Account<'info, TokenAccount>,
+    collateral_vault: Account<'info, TokenAccount>,
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
     system_program: Program<'info, System>,
 }
 
 impl<'info> OpenPosition<'info> {
-    pub fn open_position(&mut self, auth_bump: u8, collateral_amount: u64, debt_amount: u64) -> Result<()> {
+    pub fn open_position(&mut self, collateral_amount: u64, debt_amount: u64) -> Result<()> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         // get_price_no_older_than will fail if the price update is more than 30 seconds old
         let price_feed = &mut self.price_feed;
@@ -108,7 +107,7 @@ impl<'info> OpenPosition<'info> {
 
         let collateral_transfer_cpi_accounts = Transfer {
             from: self.user_ata.to_account_info(),
-            to: self.vault.to_account_info(),
+            to: self.collateral_vault.to_account_info(),
             authority: self.user.to_account_info(),
         };
 
@@ -134,7 +133,7 @@ impl<'info> OpenPosition<'info> {
             authority: self.auth.to_account_info(),
         };
 
-        let seeds = &[&b"auth"[..], &[auth_bump]];
+        let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
 
         let signer_seeds = &[&seeds[..]];
 
