@@ -4,7 +4,7 @@ use anchor_spl::{
     token::{transfer, Mint, Token, TokenAccount, Transfer},
 };
 
-use crate::{errors::{ArithmeticError, StakeError}, state::{ProtocolConfig, StakeAccount}};
+use crate::{errors::{ArithmeticError, StakeError}, state::{ProtocolConfig, StakeAccount, StakerRegistry}};
 
 #[derive(Accounts)]
 pub struct Stake<'info> {
@@ -28,6 +28,10 @@ pub struct Stake<'info> {
         associated_token::authority = user,
     )]
     pub user_ata: Account<'info, TokenAccount>,
+
+    // Add the StakerRegistry account
+    #[account(mut)]
+    pub staker_registry: Account<'info, StakerRegistry>,
 
     /// CHECK: This is an auth acc for the vault
     #[account(
@@ -81,21 +85,30 @@ impl<'info> Stake<'info> {
         let points = ((current_timestamp
             .checked_sub(self.stake_account.last_staked)
             .ok_or(ArithmeticError::ArithmeticOverflow)?)
-        .checked_div(86400)
-        .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
+            .checked_div(86400)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
             .checked_mul(self.stake_account.amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         self.stake_account.points += points;
-        
+        self.stake_account.last_staked = current_timestamp; // Update last staked timestamp        
+        self.stake_account.amount += amount; // Update staked amount
+
         self.protocol_config.stake_points += points;
+
+        // Update StakerRegistry
+        self.staker_registry.update_stake_account(StakeAccount {
+            user: self.stake_account.user,
+            amount: self.stake_account.amount,
+            points: self.stake_account.points,
+            last_staked: self.stake_account.last_staked,
+            bump: self.stake_account.bump,
+        });
         
-        // Update last staked timestamp
-        self.stake_account.last_staked = current_timestamp;
 
-        // Update staked amount
-        self.stake_account.amount += amount;
-
+        // I suggest to remove stake_points & total_debt from ProtcolConfig & move to StakerRegistry as below
+        // to avoid less acc updates. Normally used in liquidation ops. Better to read 1 acc instead of 2        
+        // staker_registry.total_stake_points += points;
 
         Ok(())
     }
@@ -136,14 +149,28 @@ impl<'info> Stake<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         self.stake_account.points += points;
+        self.stake_account.last_staked = current_timestamp; // Update last staked timestamp
+        self.stake_account.amount -= amount; // Update staked amount
 
         self.protocol_config.stake_points += points;
 
-        // Update last staked timestamp
-        self.stake_account.last_staked = current_timestamp;
+        // Update StakerRegistry
+        if self.stake_account.amount == 0 {
+            self.staker_registry.remove_stake_account(self.stake_account.user);
+        } else {
+            self.staker_registry.update_stake_account(StakeAccount {
+                user: self.stake_account.user,
+                amount: self.stake_account.amount,
+                points: self.stake_account.points,
+                last_staked: self.stake_account.last_staked,
+                bump: self.stake_account.bump,
+            });
+            
+        }
 
-        // Update staked amount
-        self.stake_account.amount -= amount;
+        // I suggest to remove stake_points & total_debt from ProtcolConfig & move to StakerRegistry as below
+        // to avoid less acc updates. Normally used in liquidation ops. Better to read 1 acc instead of 2
+        // staker_registry.total_stake_points += points;
 
         Ok(())
     }
