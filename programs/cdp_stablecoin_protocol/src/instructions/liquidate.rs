@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
-pub struct ClosePosition<'info> {
+pub struct LiquidatePosition<'info> {
     #[account(mut)]
     user: Signer<'info>,
 
@@ -70,15 +70,22 @@ pub struct ClosePosition<'info> {
     )]
     collateral_vault: Account<'info, TokenAccount>,
 
+    #[account(
+        mut,
+        seeds = [b"liquidation_rewards_vault", collateral_mint.key().as_ref()],
+        token::mint = collateral_mint,
+        token::authority = auth,
+        bump
+    )]
+    liquidation_rewards_vault: Account<'info, TokenAccount>,
+
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
     system_program: Program<'info, System>,
 }
 
-impl<'info> ClosePosition<'info> {
-    pub fn close_position(&mut self) -> Result<()> {
-        // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
-        // require!(MIN_LTV <= ltv && ltv <= MAX_LTV, PositionError::InvalidLTV);
+impl<'info> LiquidatePosition<'info> {
+    pub fn liquidate_position(&mut self) -> Result<()> {
 
         let current_debt = self.protocol_config.calculate_current_debt(&self.position)?;
 
@@ -99,14 +106,11 @@ impl<'info> ClosePosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-        
-        
-
         if MAX_LTV >= ltv {
 
             let collateral_transfer_cpi_accounts = Transfer {
                 from: self.collateral_vault.to_account_info(),
-                to: self.user_ata.to_account_info(),
+                to: self.liquidation_rewards_vault.to_account_info(),
                 authority: self.auth.to_account_info(),
             };
             let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
@@ -141,6 +145,7 @@ impl<'info> ClosePosition<'info> {
             self.protocol_config.update_totals(
                 -(current_debt as i64),
             )?;
+
         } else {
             return err!(PositionError::InvalidLTV);
         }

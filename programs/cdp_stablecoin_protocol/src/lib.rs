@@ -51,9 +51,8 @@ pub mod cdp_stablecoin_protocol {
 
     pub fn close_position(
         ctx: Context<ClosePosition>,
-        auth_bump: u8,
     ) -> Result<()> {
-        ctx.accounts.close_position(auth_bump)
+        ctx.accounts.close_position()
     }
 
     pub fn update_interest_rate(

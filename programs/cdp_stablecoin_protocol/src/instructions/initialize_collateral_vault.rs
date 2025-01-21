@@ -33,12 +33,21 @@ pub struct InitializeCollateralVault<'info> {
     #[account(
         init,
         payer = admin,
-        seeds = [b"vault", collateral_mint.key().as_ref()],
+        seeds = [b"collateral_vault", collateral_mint.key().as_ref()],
         token::mint = collateral_mint,
         token::authority = auth,
         bump
     )]
     collateral_vault: Account<'info, TokenAccount>,
+    #[account(
+        init,
+        payer = admin,
+        seeds = [b"liquidation_rewards_vault", collateral_mint.key().as_ref()],
+        token::mint = collateral_mint,
+        token::authority = auth,
+        bump
+    )]
+    liquidation_rewards_vault: Account<'info, TokenAccount>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
 }

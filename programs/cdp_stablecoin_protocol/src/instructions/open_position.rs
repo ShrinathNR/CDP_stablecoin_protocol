@@ -65,7 +65,7 @@ pub struct OpenPosition<'info> {
     price_feed: Account<'info, PriceUpdateV2>,
     #[account(
         mut,
-        seeds = [b"vault", collateral_mint.key().as_ref()],
+        seeds = [b"collateral_vault", collateral_mint.key().as_ref()],
         token::mint = collateral_mint,
         token::authority = auth,
         bump = collateral_vault_config.vault_bump
