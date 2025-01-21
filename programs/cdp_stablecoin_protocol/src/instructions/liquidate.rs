@@ -9,7 +9,7 @@ use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2
 use crate::{
     constants::{PRICE_SCALE, LIQUIDATION_THRESHOLD, LIQUIDATION_BONUS, LIQUIDATION_SPREAD},
     errors::{ArithmeticError, LiquidationError},
-    state::{ProtocolState, Position, CollateralConfig},
+    state::{ProtocolState, Position, CollateralConfig, ProtocolConfig, StakerRegistry},
 };
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
@@ -26,6 +26,14 @@ pub struct Liquidate<'info> {
     // Specific position being liquidated
     #[account(mut)]
     pub position: Account<'info, Position>,
+
+    // All dependency to ProtocolConfig can be removed if stake_coins moves into StakerRegistry
+    #[account(mut)]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+
+    // Account that holds Staker Registry
+    #[account(mut)]
+    pub staker_registry: Account<'info, StakerRegistry>,
     
     // Account initiating the liquidation
     #[account(mut)]
@@ -42,9 +50,8 @@ pub struct Liquidate<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Main liquidation function
+/// Main liquidation function. Args:-
 /// 
-/// # Arguments
 /// * `ctx` - Liquidation context containing all required accounts
 /// * `liquidation_type` - Determines soft or hard liquidation strategy
 
@@ -54,6 +61,8 @@ pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> 
     let position = &mut ctx.accounts.position;
     let protocol_state = &mut ctx.accounts.protocol_state;
     let collateral_config = &ctx.accounts.collateral_config;
+    let protocol_config = &mut ctx.accounts.protocol_config;
+    let staker_registry = &mut ctx.accounts.staker_registry;
 
     // Fetch the current price from Pyth oracle
     let price_feed: &PriceUpdateV2 = ctx.accounts.price_feed.as_ref();
@@ -72,7 +81,6 @@ pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> 
         .checked_mul(position.collateral_amount)
         .ok_or(ArithmeticError::ArithmeticOverflow)?;
     
-    
     // Calculate the current LTV ratio
     let ltv = position.debt_amount
         .checked_mul(PRICE_SCALE)
@@ -87,7 +95,7 @@ pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> 
 
     match liquidation_type {
         LiquidationType::Soft => soft_liquidate(position, protocol_state, price.price.try_into().unwrap())?,
-        LiquidationType::Hard => hard_liquidate(position, protocol_state)?,
+        LiquidationType::Hard => hard_liquidate(position, protocol_state, protocol_config, staker_registry)?,
     }
 
     // Update protocol state after liquidation
@@ -96,6 +104,8 @@ pub fn liquidate(ctx: Context<Liquidate>, liquidation_type: LiquidationType) -> 
     Ok(())
 }
 
+/// Performs a soft/partial liquidation on the given position to bring it back above the liquidation threshold
+///
 fn soft_liquidate(position: &mut Position, protocol_state: &mut ProtocolState, current_price: u64) -> Result<()> {
     let target_ratio = protocol_state.liquidation_threshold.checked_add(LIQUIDATION_SPREAD).ok_or(ArithmeticError::ArithmeticOverflow)?; // 5% buffer
     let collateral_to_liquidate = calculate_collateral_to_liquidate(position, target_ratio, current_price)?;
@@ -115,7 +125,7 @@ protocol_state.total_collateral = protocol_state.total_collateral
 /// Hard Liquidation: Completely closes an under-collateralized position
 /// 
 /// Transfers entire collateral, applies liquidation bonus, and closes position
-fn hard_liquidate(position: &mut Position, protocol_state: &mut ProtocolState) -> Result<()> {
+fn hard_liquidate(position: &mut Position, protocol_state: &mut ProtocolState, protocol_config: &mut ProtocolConfig, staker_registry: &mut StakerRegistry) -> Result<()> {
     
     // Capture current position state before closure    
     let liquidated_amount = position.collateral_amount;
@@ -141,11 +151,14 @@ fn hard_liquidate(position: &mut Position, protocol_state: &mut ProtocolState) -
         .ok_or(ArithmeticError::ArithmeticOperationError)?;
 
     // Total amount liquidator receives
-    let liquidator_receives = liquidated_amount
+    let total_liquidator_rewards = liquidated_amount
         .checked_add(liquidation_bonus)
         .ok_or(ArithmeticError::ArithmeticOperationError)?;
 
-    // TODO: logic to transfer liquidated collateral plus bonus to liquidator/stakers
+    // logic to transfer liquidated rewards (liqudated collateral plus bonus) to liquidator/stakers
+    distribute_rewards_to_stakers(protocol_config, staker_registry, total_liquidator_rewards)?;
+
+    
     // TODO: Implement stablecoin burning mechanism
 
     // Emit event for hard liquidation tracking
@@ -153,15 +166,52 @@ fn hard_liquidate(position: &mut Position, protocol_state: &mut ProtocolState) -
         user: position.user,
         liquidated_amount,
         debt_amount,
-        liquidator_receives,
+        liquidator_receives: total_liquidator_rewards,
     });
 
     Ok(())
 }
 
-/// Calculates the amount of collateral to liquidate during a soft liquidation
+
+/// Distributes liquidation rewards to stakers proportionally to their stake points.
+/// iterates through all stake accounts, calculates individual rewards, and resets points after distribution. Args:-
 ///
-/// # Arguments
+/// * `protocol_config` - Mutable reference to the ProtocolConfig containing stake points
+/// * `staker_registry` - Mutable reference to the StakerRegistry containing stake accounts
+/// * `total_liquidator_rewards` - Total amount of rewards to be distributed
+fn distribute_rewards_to_stakers(protocol_config: &mut ProtocolConfig, staker_registry: &mut StakerRegistry, total_liquidation_rewards: u64) -> Result<()> {
+    if protocol_config.stake_points == 0 {
+        return Err(LiquidationError::InsufficientCollateral.into());
+    }
+
+    let reward_per_point = total_liquidation_rewards
+        .checked_div(protocol_config.stake_points)
+        .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+    for stake_account in &mut staker_registry.stake_accounts {
+        let staker_reward = stake_account.points
+            .checked_mul(reward_per_point)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        transfer_reward_to_staker(stake_account.user, staker_reward)?;
+
+    }
+
+    Ok(())
+}
+
+/// Transfers the calculated reward to a staker's account. Args:-
+///
+/// * `staker` - Public key of the staker receiving the reward
+/// * `amount` - Amount of reward to be transferred
+fn transfer_reward_to_staker(staker: Pubkey, amount: u64) -> Result<()> {
+    // TODO: Implementation needed for transferring rewards
+    emit!(RewardDistributedEvent { staker, amount });
+    Ok(())
+}
+
+/// Calculates the amount of collateral to liquidate during a soft liquidation. Args:-
+///
 /// * `position` - Reference to the position being liquidated
 /// * `target_ratio` - Target collateralization ratio after liquidation
 /// * `current_price` - Current market price of the collateral
@@ -221,10 +271,19 @@ fn update_state(position: &mut Position, protocol_state: &mut ProtocolState) -> 
     Ok(())    
 }
 
+
+// Emit Event when a hard liquidation occurs
 #[event]
 pub struct HardLiquidationEvent {
     pub user: Pubkey,
     pub liquidated_amount: u64,
     pub debt_amount: u64,
     pub liquidator_receives: u64,
+}
+
+// Emit Event when a reward is distributed to a staker
+#[event]
+pub struct RewardDistributedEvent {
+    pub staker: Pubkey,
+    pub amount: u64,
 }
