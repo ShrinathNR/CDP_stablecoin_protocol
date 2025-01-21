@@ -14,7 +14,7 @@ pub struct Stake<'info> {
         init_if_needed,
         payer = user,
         seeds = [b"stake", user.key().as_ref()],
-        space = StakeAccount::INIT_SPACE,
+        space = 8 + StakeAccount::INIT_SPACE,
         bump,
     )]
     pub stake_account: Account<'info, StakeAccount>,

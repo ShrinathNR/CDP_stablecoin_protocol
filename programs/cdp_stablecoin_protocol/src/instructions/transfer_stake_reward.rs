@@ -1,0 +1,101 @@
+use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token::{burn, transfer, Burn, Mint, Token, TokenAccount, Transfer},
+};
+use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
+
+use crate::{
+    constants::MAX_LTV,
+    errors::{ArithmeticError, PositionError},
+    state::{CollateralConfig, Position, ProtocolConfig, StakeAccount},
+};
+
+#[derive(Accounts)]
+pub struct TransferStakeRewards<'info> {
+    #[account(mut)]
+    admin: Signer<'info>,
+
+    staker: SystemAccount<'info>,
+
+    collateral_mint: Account<'info, Mint>,
+    
+    protocol_config: Account<'info, ProtocolConfig>,
+    
+    #[account(
+        address = protocol_config.stable_mint
+    )]
+    stable_mint: Account<'info, Mint>,
+    
+    /// CHECK: This is an auth acc for the vault
+    #[account(
+        seeds = [b"auth"],
+        bump = protocol_config.auth_bump
+    )]
+    auth: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        associated_token::mint = collateral_mint,
+        associated_token::authority = staker,
+    )]
+    staker_ata: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"liquidation_rewards_vault", collateral_mint.key().as_ref()],
+        token::mint = collateral_mint,
+        token::authority = auth,
+        bump
+    )]
+    liquidation_rewards_vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    pub stake_vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"stake", staker.key().as_ref()],
+        bump,
+    )]
+    pub stake_account: Account<'info, StakeAccount>,
+
+    token_program: Program<'info, Token>,
+    associated_token_program: Program<'info, AssociatedToken>,
+    system_program: Program<'info, System>,
+}
+
+impl<'info> TransferStakeRewards<'info> {
+    pub fn transfer_stake_reward(&mut self) -> Result<()> {
+
+            let stake_reward_transfer_cpi_accounts = Transfer {
+                from: self.liquidation_rewards_vault.to_account_info(),
+                to: self.staker.to_account_info(),
+                authority: self.auth.to_account_info(),
+            };
+            let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
+    
+            let signer_seeds = &[&seeds[..]];
+    
+            let stake_reward_transfer_cpi_ctx = CpiContext::new_with_signer(
+                self.token_program.to_account_info(),
+                stake_reward_transfer_cpi_accounts,
+                signer_seeds,
+            );
+
+            let amount = self.liquidation_rewards_vault.amount
+                .checked_mul(self.stake_account.points)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?
+                .checked_div(self.protocol_config.stake_points)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+    
+            transfer(stake_reward_transfer_cpi_ctx, amount)?;
+
+        Ok(())
+    }
+}
