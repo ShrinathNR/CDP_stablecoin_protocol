@@ -71,4 +71,8 @@ pub mod cdp_stablecoin_protocol {
     pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
         ctx.accounts.liquidate_position()
     }
+
+    pub fn transfer_stake_reward(ctx: Context<TransferStakeRewards>) -> Result<()> {
+        ctx.accounts.transfer_stake_reward()
+    }
 }
