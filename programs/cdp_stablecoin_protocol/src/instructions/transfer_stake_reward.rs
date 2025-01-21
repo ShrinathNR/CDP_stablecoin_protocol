@@ -1,14 +1,12 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{burn, transfer, Burn, Mint, Token, TokenAccount, Transfer},
+    token::{transfer, Mint, Token, TokenAccount, Transfer},
 };
-use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
-    constants::MAX_LTV,
-    errors::{ArithmeticError, PositionError},
-    state::{CollateralConfig, Position, ProtocolConfig, StakeAccount},
+    errors::ArithmeticError,
+    state::{ProtocolConfig, StakeAccount},
 };
 
 #[derive(Accounts)]
@@ -19,14 +17,14 @@ pub struct TransferStakeRewards<'info> {
     staker: SystemAccount<'info>,
 
     collateral_mint: Account<'info, Mint>,
-    
+
     protocol_config: Account<'info, ProtocolConfig>,
-    
+
     #[account(
         address = protocol_config.stable_mint
     )]
     stable_mint: Account<'info, Mint>,
-    
+
     /// CHECK: This is an auth acc for the vault
     #[account(
         seeds = [b"auth"],
@@ -72,29 +70,30 @@ pub struct TransferStakeRewards<'info> {
 
 impl<'info> TransferStakeRewards<'info> {
     pub fn transfer_stake_reward(&mut self) -> Result<()> {
+        let stake_reward_transfer_cpi_accounts = Transfer {
+            from: self.liquidation_rewards_vault.to_account_info(),
+            to: self.staker.to_account_info(),
+            authority: self.auth.to_account_info(),
+        };
+        let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
 
-            let stake_reward_transfer_cpi_accounts = Transfer {
-                from: self.liquidation_rewards_vault.to_account_info(),
-                to: self.staker.to_account_info(),
-                authority: self.auth.to_account_info(),
-            };
-            let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
-    
-            let signer_seeds = &[&seeds[..]];
-    
-            let stake_reward_transfer_cpi_ctx = CpiContext::new_with_signer(
-                self.token_program.to_account_info(),
-                stake_reward_transfer_cpi_accounts,
-                signer_seeds,
-            );
+        let signer_seeds = &[&seeds[..]];
 
-            let amount = self.liquidation_rewards_vault.amount
-                .checked_mul(self.stake_account.points)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?
-                .checked_div(self.protocol_config.stake_points)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
-    
-            transfer(stake_reward_transfer_cpi_ctx, amount)?;
+        let stake_reward_transfer_cpi_ctx = CpiContext::new_with_signer(
+            self.token_program.to_account_info(),
+            stake_reward_transfer_cpi_accounts,
+            signer_seeds,
+        );
+
+        let amount = self
+            .liquidation_rewards_vault
+            .amount
+            .checked_mul(self.stake_account.points)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(self.protocol_config.stake_points)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        transfer(stake_reward_transfer_cpi_ctx, amount)?;
 
         Ok(())
     }

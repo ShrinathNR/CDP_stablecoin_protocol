@@ -17,14 +17,14 @@ pub struct ClosePosition<'info> {
     user: Signer<'info>,
 
     collateral_mint: Account<'info, Mint>,
-    
+
     #[account(
         address = protocol_config.stable_mint
     )]
     stable_mint: Account<'info, Mint>,
-    
+
     protocol_config: Account<'info, ProtocolConfig>,
-    
+
     /// CHECK: This is an auth acc for the vault
     #[account(
         seeds = [b"auth"],
@@ -78,11 +78,14 @@ impl<'info> ClosePosition<'info> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         // require!(MIN_LTV <= ltv && ltv <= MAX_LTV, PositionError::InvalidLTV);
 
-        let current_debt = self.protocol_config.calculate_current_debt(&self.position)?;
+        let current_debt = self
+            .protocol_config
+            .calculate_current_debt(&self.position)?;
 
         let price_update = &mut self.price_update;
         let maximum_age: u64 = 30;
-        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
+        let feed_id: [u8; 32] =
+            get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
         let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
 
         let collateral_value = (price.price as u64)
@@ -97,35 +100,32 @@ impl<'info> ClosePosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-        
-        
-
         if MAX_LTV >= ltv {
-
             let collateral_transfer_cpi_accounts = Transfer {
                 from: self.collateral_vault.to_account_info(),
                 to: self.user_ata.to_account_info(),
                 authority: self.auth.to_account_info(),
             };
             let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
-    
+
             let signer_seeds = &[&seeds[..]];
-    
+
             let collateral_transfer_cpi_ctx = CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
                 collateral_transfer_cpi_accounts,
                 signer_seeds,
             );
-    
+
             transfer(collateral_transfer_cpi_ctx, self.position.collateral_amount)?;
-    
-            self.collateral_vault_config.amount = self.collateral_vault_config
+
+            self.collateral_vault_config.amount = self
+                .collateral_vault_config
                 .amount
                 .checked_sub(self.position.collateral_amount)
                 .ok_or(ArithmeticError::ArithmeticOverflow)?;
-    
+
             // Calculate current debt with accrued interest
-            
+
             let accounts = Burn {
                 mint: self.stable_mint.to_account_info(),
                 from: self.user_stable_ata.to_account_info(),
@@ -134,11 +134,9 @@ impl<'info> ClosePosition<'info> {
 
             let stable_burn_cpi_ctx =
                 CpiContext::new(self.token_program.to_account_info(), accounts);
-            burn(stable_burn_cpi_ctx, current_debt)?;  // Use current_debt with accrued interest
+            burn(stable_burn_cpi_ctx, current_debt)?; // Use current_debt with accrued interest
 
-            self.protocol_config.update_totals(
-                -(current_debt as i64),
-            )?;
+            self.protocol_config.update_totals(-(current_debt as i64))?;
         } else {
             return err!(PositionError::InvalidLTV);
         }

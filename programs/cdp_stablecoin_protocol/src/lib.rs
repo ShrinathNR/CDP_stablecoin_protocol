@@ -18,7 +18,7 @@ pub mod cdp_stablecoin_protocol {
         mint_fee: u16,
         base_rate: u16,
         sigma: u16,
-        stablecoin_price_feed: String
+        stablecoin_price_feed: String,
     ) -> Result<()> {
         ctx.accounts.initialize_protocol_config(
             protocol_fee,
@@ -35,7 +35,8 @@ pub mod cdp_stablecoin_protocol {
         ctx: Context<InitializeCollateralVault>,
         collateral_price_feed: String,
     ) -> Result<()> {
-        ctx.accounts.initialize_collateral_vault(collateral_price_feed, &ctx.bumps)
+        ctx.accounts
+            .initialize_collateral_vault(collateral_price_feed, &ctx.bumps)
     }
 
     pub fn open_position(
@@ -43,24 +44,16 @@ pub mod cdp_stablecoin_protocol {
         collateral_amount: u64,
         debt_amount: u64,
     ) -> Result<()> {
-        ctx.accounts.open_position(
-            collateral_amount,
-            debt_amount,
-        )
+        ctx.accounts.open_position(collateral_amount, debt_amount)
     }
 
-    pub fn close_position(
-        ctx: Context<ClosePosition>,
-    ) -> Result<()> {
+    pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         ctx.accounts.close_position()
     }
 
-    pub fn update_interest_rate(
-        ctx: Context<UpdateInterestRate>,
-    ) -> Result<()> {
+    pub fn update_interest_rate(ctx: Context<UpdateInterestRate>) -> Result<()> {
         ctx.accounts.update_interest_rate()
     }
-
 
     pub fn stake_stable_tokens(ctx: Context<Stake>, amount: u64) -> Result<()> {
         // Check if the user is the owner of the stake account

@@ -80,7 +80,8 @@ impl<'info> OpenPosition<'info> {
         // get_price_no_older_than will fail if the price update is more than 30 seconds old
         let price_feed = &mut self.price_feed;
         let maximum_age: u64 = 30;
-        let feed_id: [u8; 32] = get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
+        let feed_id: [u8; 32] =
+            get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
         let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
         let collateral_value = (price.price as u64)
             .checked_mul(10_u64.pow(price.exponent as u32))
@@ -93,7 +94,7 @@ impl<'info> OpenPosition<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
-        
+
         require!(ltv <= MAX_LTV, PositionError::InvalidLTV);
 
         self.position.set_inner(Position {
@@ -116,14 +117,13 @@ impl<'info> OpenPosition<'info> {
 
         transfer(collateral_transfer_cpi_ctx, collateral_amount)?;
 
-        self.collateral_vault_config.amount = self.collateral_vault_config
+        self.collateral_vault_config.amount = self
+            .collateral_vault_config
             .amount
             .checked_add(collateral_amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        self.protocol_config.update_totals(
-            debt_amount as i64
-        )?;
+        self.protocol_config.update_totals(debt_amount as i64)?;
 
         let accounts = MintTo {
             mint: self.stable_mint.to_account_info(),

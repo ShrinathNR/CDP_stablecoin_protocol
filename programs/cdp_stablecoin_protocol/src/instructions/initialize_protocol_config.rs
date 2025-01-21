@@ -54,10 +54,10 @@ impl<'info> InitializeProtocolConfig<'info> {
             auth_bump: bumps.auth,
             bump: bumps.protocol_config,
             interest_index: ProtocolConfig::INITIAL_INTEREST_INDEX,
-            stablecoin_price_feed, 
+            stablecoin_price_feed,
             last_index_update: Clock::get()?.unix_timestamp,
             total_debt: 0,
-            stake_points:0
+            stake_points: 0,
         });
 
         Ok(())

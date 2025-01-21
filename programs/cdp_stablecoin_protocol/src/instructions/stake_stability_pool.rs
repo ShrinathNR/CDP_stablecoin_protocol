@@ -4,7 +4,10 @@ use anchor_spl::{
     token::{transfer, Mint, Token, TokenAccount, Transfer},
 };
 
-use crate::{errors::{ArithmeticError, StakeError}, state::{ProtocolConfig, StakeAccount}};
+use crate::{
+    errors::{ArithmeticError, StakeError},
+    state::{ProtocolConfig, StakeAccount},
+};
 
 #[derive(Accounts)]
 pub struct Stake<'info> {
@@ -64,7 +67,6 @@ impl<'info> Stake<'info> {
         Ok(())
     }
     pub fn deposit_tokens(&mut self, amount: u64) -> Result<()> {
-
         // Transfer tokens
         let cpi_program = self.token_program.to_account_info();
 
@@ -89,15 +91,14 @@ impl<'info> Stake<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         self.stake_account.points += points;
-        
+
         self.protocol_config.stake_points += points;
-        
+
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;
 
         // Update staked amount
         self.stake_account.amount += amount;
-
 
         Ok(())
     }
@@ -117,10 +118,7 @@ impl<'info> Stake<'info> {
             to: self.user_ata.to_account_info(),
             authority: self.auth.to_account_info(), //to be updated to Compute Labs wallet
         };
-        let signer_seeds = &[
-            &b"auth"[..],
-            &[bumps.auth],
-        ];
+        let signer_seeds = &[&b"auth"[..], &[bumps.auth]];
         let binding = [&signer_seeds[..]];
 
         let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, &binding);
