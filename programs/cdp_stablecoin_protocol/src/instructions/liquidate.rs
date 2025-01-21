@@ -135,13 +135,15 @@ fn hard_liquidate(position: &mut Position, protocol_state: &mut ProtocolState, p
     position.collateral_amount = 0;
     position.debt_amount = 0;
 
-    // Update protocol state
+/*
+    // Update protocol state - logic handled in fn update_state()
     protocol_state.total_collateral = protocol_state.total_collateral
         .checked_sub(liquidated_amount)
         .ok_or(ArithmeticError::ArithmeticOperationError)?;
     protocol_state.total_stablecoin = protocol_state.total_stablecoin
         .checked_sub(debt_amount)
         .ok_or(ArithmeticError::ArithmeticOperationError)?;
+*/
 
     // Calculate liquidation bonus (incentive for liquidators)
     let liquidation_bonus = liquidated_amount
@@ -156,6 +158,7 @@ fn hard_liquidate(position: &mut Position, protocol_state: &mut ProtocolState, p
         .ok_or(ArithmeticError::ArithmeticOperationError)?;
 
     // logic to transfer liquidated rewards (liqudated collateral plus bonus) to liquidator/stakers
+    //MOVE THIS OUT + COLLATE total_liquidator_rewards
     distribute_rewards_to_stakers(protocol_config, staker_registry, total_liquidator_rewards)?;
 
     
@@ -263,11 +266,12 @@ fn update_state(position: &mut Position, protocol_state: &mut ProtocolState) -> 
         .checked_sub(position.debt_amount)
         .ok_or(LiquidationError::InsufficientCollateral)?;
 
+    
     if position.collateral_amount == 0 && position.debt_amount == 0 {        
         // TODO: Implement position closure mechanism
         // Potentially mark position as closed or remove from storage
     }
-
+    
     Ok(())    
 }
 
