@@ -74,4 +74,8 @@ pub mod cdp_stablecoin_protocol {
     pub fn unstake_stable_tokens(ctx: Context<Stake>, amount: u64) -> Result<()> {
         ctx.accounts.withdraw_tokens(amount, &ctx.bumps)
     }
+
+    pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
+        ctx.accounts.liquidate_position()
+    }
 }

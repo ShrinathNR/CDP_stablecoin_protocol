@@ -14,7 +14,9 @@ use crate::{
 #[derive(Accounts)]
 pub struct LiquidatePosition<'info> {
     #[account(mut)]
-    user: Signer<'info>,
+    liquidator: Signer<'info>,
+
+    user: SystemAccount<'info>,
 
     collateral_mint: Account<'info, Mint>,
     
@@ -56,9 +58,7 @@ pub struct LiquidatePosition<'info> {
     )]
     position: Account<'info, Position>,
 
-    // #[account(
-    //     // owner = 
-    // )]
+    #[account(owner = pyth_solana_receiver_sdk::ID)]
     price_update: Account<'info, PriceUpdateV2>,
 
     #[account(
@@ -78,6 +78,15 @@ pub struct LiquidatePosition<'info> {
         bump
     )]
     liquidation_rewards_vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    pub stake_vault: Account<'info, TokenAccount>,
 
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
@@ -106,7 +115,7 @@ impl<'info> LiquidatePosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-        if MAX_LTV >= ltv {
+        if MAX_LTV <= ltv {
 
             let collateral_transfer_cpi_accounts = Transfer {
                 from: self.collateral_vault.to_account_info(),
@@ -134,8 +143,8 @@ impl<'info> LiquidatePosition<'info> {
             
             let accounts = Burn {
                 mint: self.stable_mint.to_account_info(),
-                from: self.user_stable_ata.to_account_info(),
-                authority: self.user.to_account_info(),
+                from: self.stake_vault.to_account_info(),
+                authority: self.auth.to_account_info(),
             };
 
             let stable_burn_cpi_ctx =

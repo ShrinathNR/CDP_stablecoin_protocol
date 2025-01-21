@@ -56,9 +56,7 @@ pub struct ClosePosition<'info> {
     )]
     position: Account<'info, Position>,
 
-    // #[account(
-    //     // owner = 
-    // )]
+    #[account(owner = pyth_solana_receiver_sdk::ID)]
     price_update: Account<'info, PriceUpdateV2>,
 
     #[account(

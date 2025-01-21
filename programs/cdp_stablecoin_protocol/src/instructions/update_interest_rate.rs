@@ -9,11 +9,11 @@ use crate::{
 #[derive(Accounts)]
 pub struct UpdateInterestRate<'info> {
     #[account(mut)]
+    user: Signer<'info>,
+    #[account(mut)]
     pub protocol_config: Account<'info, ProtocolConfig>,
     
-    // #[account(
-    //     // owner = 
-    // )]
+    #[account(owner = pyth_solana_receiver_sdk::ID)]
     pub price_feed: Account<'info, PriceUpdateV2>,
 }
 

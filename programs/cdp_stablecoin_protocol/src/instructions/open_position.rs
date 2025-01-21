@@ -59,9 +59,7 @@ pub struct OpenPosition<'info> {
         bump
     )]
     position: Account<'info, Position>,
-    // #[account(
-    //     // owner = 
-    // )]
+    #[account(owner = pyth_solana_receiver_sdk::ID)]
     price_feed: Account<'info, PriceUpdateV2>,
     #[account(
         mut,

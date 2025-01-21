@@ -13,7 +13,7 @@ pub struct Stake<'info> {
     #[account(
         init_if_needed,
         payer = user,
-        seeds = [b"compute-stake", user.key().as_ref()],
+        seeds = [b"stake", user.key().as_ref()],
         space = StakeAccount::INIT_SPACE,
         bump,
     )]
@@ -38,10 +38,12 @@ pub struct Stake<'info> {
     #[account(
         init_if_needed,
         payer = user,
-        associated_token::mint = stable_mint,
-        associated_token::authority = auth,
+        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub stake_vault: Account<'info, TokenAccount>,
     protocol_config: Account<'info, ProtocolConfig>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -68,7 +70,7 @@ impl<'info> Stake<'info> {
 
         let cpi_accounts = Transfer {
             from: self.user_ata.to_account_info(),
-            to: self.vault.to_account_info(),
+            to: self.stake_vault.to_account_info(),
             authority: self.user.to_account_info(),
         };
 
@@ -111,7 +113,7 @@ impl<'info> Stake<'info> {
         let cpi_program = self.token_program.to_account_info();
 
         let cpi_accounts = Transfer {
-            from: self.vault.to_account_info(),
+            from: self.stake_vault.to_account_info(),
             to: self.user_ata.to_account_info(),
             authority: self.auth.to_account_info(), //to be updated to Compute Labs wallet
         };
