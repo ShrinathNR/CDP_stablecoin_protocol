@@ -19,7 +19,10 @@ pub struct OpenPosition<'info> {
     collateral_mint: Account<'info, Mint>,
 
     #[account(
-        address = protocol_config.stable_mint
+        mut,
+        address = protocol_config.stable_mint,
+        mint::decimals = 6,
+        mint::authority = auth,
     )]
     stable_mint: Account<'info, Mint>,
     #[account(
@@ -30,6 +33,7 @@ pub struct OpenPosition<'info> {
     protocol_config: Account<'info, ProtocolConfig>,
     /// CHECK: This is an auth acc for the vault
     #[account(
+        mut,
         seeds = [b"auth"],
         bump = protocol_config.auth_bump
     )]
@@ -41,12 +45,14 @@ pub struct OpenPosition<'info> {
     )]
     user_ata: Box<Account<'info, TokenAccount>>,
     #[account(
-        mut,
+        init_if_needed,
+        payer = user,
         associated_token::mint = stable_mint,
         associated_token::authority = user,
     )]
     user_stable_ata: Box<Account<'info, TokenAccount>>,
     #[account(
+        mut,
         seeds = [b"collateral", collateral_mint.key().as_ref()],
         bump = collateral_vault_config.bump
     )]
@@ -79,14 +85,20 @@ impl<'info> OpenPosition<'info> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         // get_price_no_older_than will fail if the price update is more than 30 seconds old
         let price_feed = &mut self.price_feed;
-        let maximum_age: u64 = 30;
+        // let maximum_age: u64 = 30;
         let feed_id: [u8; 32] =
             get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
-        let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
-        let collateral_value = (price.price as u64)
-            .checked_mul(10_u64.pow(price.exponent as u32))
+
+        // msg!("feed_id is {}", feed_id);
+        // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let price = price_feed.get_price_unchecked(&feed_id)?;
+
+        msg!("The price is ({} ± {}) * 10^{}", price.price, price.conf, price.exponent);
+
+        let collateral_value = (price.price as u128)
+            .checked_mul(10_u128.pow(price.exponent.abs() as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_mul(collateral_amount)
+            .checked_mul(collateral_amount as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         let ltv = (debt_amount as u128)

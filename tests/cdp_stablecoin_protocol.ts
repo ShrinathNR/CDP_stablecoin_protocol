@@ -9,11 +9,12 @@ const redemptionFee = 500;
 const mintFee = 500;
 const baseRate = 100;
 const sigma = 20;
-const stablecoinPriceFeed = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
-const collateralPriceFeed = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb"
+const stablecoinPriceFeed = "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
 const collateralAmount = new BN(0.1*LAMPORTS_PER_SOL);
 const debtAmount = new BN(1);
+const JITO_SOL_PRICE_FEED_ID = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb";
 
+const JITO_SOL_PYTH_ACCOUNT = new PublicKey("AxaxyeDT8JnWERSaTKvFXvPKkEdxnamKSqpWbsSjYg1g");
 
 
 describe("cdp_stablecoin_protocol", () => {
@@ -28,6 +29,8 @@ describe("cdp_stablecoin_protocol", () => {
   let collateralAccount: Account;
   let collateralVaultConfig: PublicKey;
   let collateralVault: PublicKey;
+  let userStableAta: PublicKey;
+  let position: PublicKey;
 
 
   const confirm = async (signature: string): Promise<string> => {
@@ -59,13 +62,15 @@ describe("cdp_stablecoin_protocol", () => {
     program.programId
   )[0];
 
-  // const stableMint = anchor.web3.PublicKey.findProgramAddressSync(
-  //   [
-  //     Buffer.from("stable"),
-  //   ],
-  //   program.programId
-  // )[0];
-  const stableMint = Keypair.generate()
+  
+
+  const stableMint = anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("stable"),
+    ],
+    program.programId
+  )[0];
+  // const stableMint = Keypair.generate()
 
   it("Create Collateral Mint and mint tokens", async() => {
     collateralMint = await createMint(provider.connection, wallet.payer, wallet.publicKey, wallet.publicKey, 6);
@@ -74,6 +79,8 @@ describe("cdp_stablecoin_protocol", () => {
     collateralAccount = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, collateralMint, wallet.publicKey);
 
     const tx = await mintTo(provider.connection, wallet.payer, collateralMint, collateralAccount.address, wallet.payer, 1000000000);
+
+    userStableAta = getAssociatedTokenAddressSync(stableMint, wallet.publicKey)
 
     collateralVaultConfig = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -84,7 +91,7 @@ describe("cdp_stablecoin_protocol", () => {
     )[0];
     collateralVault = anchor.web3.PublicKey.findProgramAddressSync(
       [
-        Buffer.from("vault"),
+        Buffer.from("collateral_vault"),
         collateralMint.toBuffer()
       ],
       program.programId
@@ -107,10 +114,9 @@ describe("cdp_stablecoin_protocol", () => {
       admin: wallet.publicKey,
       protocolConfig,
       auth,
-      stableMint: stableMint.publicKey,
-
+      stableMint: stableMint,
     })
-    .signers([wallet.payer, stableMint])
+    .signers([wallet.payer])
     .rpc()
     .then(confirm);
     console.log("Your transaction signature", tx);
@@ -120,7 +126,7 @@ describe("cdp_stablecoin_protocol", () => {
 
     // Add your test here.
     const tx = await program.methods.initializeCollateralVault(
-      collateralPriceFeed
+      JITO_SOL_PRICE_FEED_ID
     )
     .accountsPartial({
       admin: wallet.publicKey,
@@ -136,7 +142,16 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  xit("Open position", async () => {
+  it("Open position", async () => {
+
+    position = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("position"),
+        wallet.publicKey.toBuffer(),
+        collateralMint.toBuffer()
+      ],
+      program.programId
+    )[0];
     
 
     // Add your test here.
@@ -147,13 +162,18 @@ describe("cdp_stablecoin_protocol", () => {
     .accountsPartial({
       user: wallet.publicKey,
       collateralMint,
-      collateralVaultConfig,
+      stableMint: stableMint,
       protocolConfig,
       auth,
+      userAta: collateralAccount.address,
+      userStableAta,
+      collateralVaultConfig,
+      position,
+      priceFeed: JITO_SOL_PYTH_ACCOUNT,
       collateralVault,
     })
-    .signers([wallet.payer])
-    .rpc()
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
     .then(confirm);
     console.log("Your transaction signature", tx);
   });
