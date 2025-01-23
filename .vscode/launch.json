@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Test Interest Rate Detailed",
+            "type": "python",
+            "request": "launch",
+            "module": "protocol_model.tests.test_interest_rate_detailed",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/research",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/research"
+            }
+        }
+    ]
+} 
