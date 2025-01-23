@@ -101,7 +101,7 @@ impl<'info> OpenPosition<'info> {
             user: self.user.key(),
             collateral_amount,
             debt_amount,
-            initial_interest_index: self.protocol_config.interest_index,
+            prev_cumulative_interest_rate: self.protocol_config.cumulative_interest_rate,
         });
 
         let collateral_transfer_cpi_accounts = Transfer {

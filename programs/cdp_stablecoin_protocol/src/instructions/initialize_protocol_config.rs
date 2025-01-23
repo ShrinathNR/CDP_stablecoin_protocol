@@ -53,9 +53,9 @@ impl<'info> InitializeProtocolConfig<'info> {
             sigma,
             auth_bump: bumps.auth,
             bump: bumps.protocol_config,
-            interest_index: ProtocolConfig::INITIAL_INTEREST_INDEX,
+            cumulative_interest_rate: ProtocolConfig::INITIAL_CUMULATIVE_RATE,
             stablecoin_price_feed,
-            last_index_update: Clock::get()?.unix_timestamp,
+            last_interest_rate_update: Clock::get()?.unix_timestamp,
             total_debt: 0,
             stake_points: 0,
         });
