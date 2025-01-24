@@ -126,9 +126,9 @@ impl<'info> ClosePosition<'info> {
 
             transfer(collateral_transfer_cpi_ctx, self.position.collateral_amount)?;
 
-            self.collateral_vault_config.amount = self
+            self.collateral_vault_config.collateral_amount = self
                 .collateral_vault_config
-                .amount
+                .collateral_amount
                 .checked_sub(self.position.collateral_amount)
                 .ok_or(ArithmeticError::ArithmeticOverflow)?;
 

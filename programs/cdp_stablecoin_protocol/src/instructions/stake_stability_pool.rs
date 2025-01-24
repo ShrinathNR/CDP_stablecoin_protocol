@@ -6,7 +6,7 @@ use anchor_spl::{
 
 use crate::{
     errors::{ArithmeticError, StakeError},
-    state::{ProtocolConfig, StakeAccount},
+    state::{CollateralConfig, ProtocolConfig, StakeAccount},
 };
 
 #[derive(Accounts)]
@@ -47,6 +47,11 @@ pub struct Stake<'info> {
         bump
     )]
     pub stake_vault: Account<'info, TokenAccount>,
+    #[account(
+        seeds = [b"collateral", collateral_vault_config.mint.key().as_ref()],
+        bump = collateral_vault_config.bump
+    )]
+    collateral_vault_config: Box<Account<'info, CollateralConfig>>,
     protocol_config: Account<'info, ProtocolConfig>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -60,6 +65,8 @@ impl<'info> Stake<'info> {
             user: self.user.key(),
             amount,
             points: 0,
+            init_deposit_depletion_factor: self.collateral_vault_config.deposit_depletion_factor,
+            init_gain_sum: self.collateral_vault_config.gain_summation,
             last_staked: Clock::get()?.unix_timestamp,
             bump: bumps.stake_account,
         });
@@ -93,6 +100,9 @@ impl<'info> Stake<'info> {
         self.stake_account.points += points;
 
         self.protocol_config.stake_points += points;
+
+        self.protocol_config.total_stake_amount += amount as u128;
+
 
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;

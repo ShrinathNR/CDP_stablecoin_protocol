@@ -7,7 +7,10 @@ pub struct CollateralConfig {
     #[max_len(100)]
     pub collateral_price_feed: String,
     pub vault: Pubkey,
-    pub amount: u64,
+    pub collateral_amount: u64,
+    pub stability_pool_rewards_amount: u64,
+    pub deposit_depletion_factor: u16,
+    pub gain_summation: u128,
     pub bump: u8,
     pub vault_bump: u8,
 }
