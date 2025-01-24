@@ -1,4 +1,4 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::native_token::LAMPORTS_PER_SOL};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{burn, transfer, Burn, Mint, Token, TokenAccount, Transfer},
@@ -19,7 +19,10 @@ pub struct ClosePosition<'info> {
     collateral_mint: Account<'info, Mint>,
 
     #[account(
-        address = protocol_config.stable_mint
+        mut,
+        address = protocol_config.stable_mint,
+        mint::decimals = 6,
+        mint::authority = auth,
     )]
     stable_mint: Account<'info, Mint>,
 
@@ -27,6 +30,7 @@ pub struct ClosePosition<'info> {
 
     /// CHECK: This is an auth acc for the vault
     #[account(
+        mut,
         seeds = [b"auth"],
         bump = protocol_config.auth_bump
     )]
@@ -44,6 +48,7 @@ pub struct ClosePosition<'info> {
     )]
     user_stable_ata: Box<Account<'info, TokenAccount>>,
     #[account(
+        mut,
         seeds = [b"collateral", collateral_mint.key().as_ref()],
         bump = collateral_vault_config.bump
     )]
@@ -57,7 +62,7 @@ pub struct ClosePosition<'info> {
     position: Account<'info, Position>,
 
     #[account(owner = pyth_solana_receiver_sdk::ID)]
-    price_update: Account<'info, PriceUpdateV2>,
+    price_feed: Account<'info, PriceUpdateV2>,
 
     #[account(
         mut,
@@ -82,16 +87,19 @@ impl<'info> ClosePosition<'info> {
             .protocol_config
             .calculate_current_debt(&self.position)?;
 
-        let price_update = &mut self.price_update;
-        let maximum_age: u64 = 30;
+        let price_feed = &self.price_feed;
+        // let maximum_age: u64 = 30;
         let feed_id: [u8; 32] =
             get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
-        let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let price = price_feed.get_price_unchecked(&feed_id)?;
 
-        let collateral_value = (price.price as u64)
-            .checked_mul(10_u64.pow(price.exponent as u32))
+        let collateral_value = (price.price as u128)
+            .checked_mul(self.position.collateral_amount as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_mul(self.position.collateral_amount)
+            .checked_div(10_u128.pow(price.exponent.abs() as u32))
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(LAMPORTS_PER_SOL as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         let ltv = (current_debt as u128)

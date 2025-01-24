@@ -140,7 +140,7 @@ impl<'info> UpdateInterestRate<'info> {
         };
 
         // Get current stablecoin price
-        let price_feed = &mut self.price_feed;
+        let price_feed = &self.price_feed;
         let maximum_age: u64 = 30;
         let feed_id: [u8; 32] = get_feed_id_from_hex(&self.protocol_config.stablecoin_price_feed)?;
         let stablecoin_price =

@@ -142,7 +142,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("Open position", async () => {
+  it("Open debt position", async () => {
 
     position = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -153,12 +153,42 @@ describe("cdp_stablecoin_protocol", () => {
       program.programId
     )[0];
     
-
-    // Add your test here.
     const tx = await program.methods.openPosition(
       collateralAmount,
       debtAmount
     )
+    .accountsPartial({
+      user: wallet.publicKey,
+      collateralMint,
+      stableMint: stableMint,
+      protocolConfig,
+      auth,
+      userAta: collateralAccount.address,
+      userStableAta,
+      collateralVaultConfig,
+      position,
+      priceFeed: JITO_SOL_PYTH_ACCOUNT,
+      collateralVault,
+    })
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+
+  it("Close debt position", async () => {
+
+    position = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("position"),
+        wallet.publicKey.toBuffer(),
+        collateralMint.toBuffer()
+      ],
+      program.programId
+    )[0];
+    
+    const tx = await program.methods.closePosition()
     .accountsPartial({
       user: wallet.publicKey,
       collateralMint,
