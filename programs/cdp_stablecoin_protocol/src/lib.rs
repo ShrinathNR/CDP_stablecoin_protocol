@@ -5,7 +5,7 @@ pub mod constants;
 pub mod errors;
 pub mod state;
 
-declare_id!("BvMWoXUSWLR4udmcmPX5M9DM89kCCJJvQWvxKE55uBGH");
+declare_id!("3xYBiBikqqFRLKJbctJ1ByaKr1cHGbBdhj9BSUTuTECa");
 
 #[program]
 pub mod cdp_stablecoin_protocol {

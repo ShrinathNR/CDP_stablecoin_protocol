@@ -1,4 +1,4 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::native_token::LAMPORTS_PER_SOL};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{mint_to, transfer, Mint, MintTo, Token, TokenAccount, Transfer},
@@ -10,6 +10,7 @@ use crate::{
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position, ProtocolConfig},
 };
+const FEED_ID: &str = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb";
 
 #[derive(Accounts)]
 pub struct OpenPosition<'info> {
@@ -54,6 +55,7 @@ pub struct OpenPosition<'info> {
     #[account(
         mut,
         seeds = [b"collateral", collateral_mint.key().as_ref()],
+        constraint = collateral_vault_config.mint == collateral_mint.key(),
         bump = collateral_vault_config.bump
     )]
     collateral_vault_config: Account<'info, CollateralConfig>,
@@ -64,7 +66,7 @@ pub struct OpenPosition<'info> {
         seeds = [b"position", user.key().as_ref(), collateral_mint.key().as_ref()],
         bump
     )]
-    position: Account<'info, Position>,
+    position: Box<Account<'info, Position>>,
     #[account(owner = pyth_solana_receiver_sdk::ID)]
     price_feed: Account<'info, PriceUpdateV2>,
     #[account(
@@ -74,7 +76,7 @@ pub struct OpenPosition<'info> {
         token::authority = auth,
         bump = collateral_vault_config.vault_bump
     )]
-    collateral_vault: Account<'info, TokenAccount>,
+    collateral_vault: Box<Account<'info, TokenAccount>>,
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
     system_program: Program<'info, System>,
@@ -84,10 +86,23 @@ impl<'info> OpenPosition<'info> {
     pub fn open_position(&mut self, collateral_amount: u64, debt_amount: u64) -> Result<()> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         // get_price_no_older_than will fail if the price update is more than 30 seconds old
-        let price_feed = &mut self.price_feed;
+        let price_feed = &self.price_feed;
+        msg!("feed_id raw bytes: {:?}", self.collateral_vault_config.collateral_price_feed.as_bytes());
+        msg!("feed_id length: {}", self.collateral_vault_config.collateral_price_feed.len());
+        msg!("feed_id is '{}'", self.collateral_vault_config.collateral_price_feed);
+        msg!("mint pubkey is '{}'", self.collateral_vault_config.mint);
+        msg!("bump is {}", self.collateral_vault_config.bump);
+
         // let maximum_age: u64 = 30;
+
         let feed_id: [u8; 32] =
             get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
+
+            msg!("Successfully got feed_id");
+
+        // let feed_id: [u8; 32] =
+        //     get_feed_id_from_hex(FEED_ID)?;
+
 
         // msg!("feed_id is {}", feed_id);
         // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
@@ -95,11 +110,17 @@ impl<'info> OpenPosition<'info> {
 
         msg!("The price is ({} ± {}) * 10^{}", price.price, price.conf, price.exponent);
 
+        msg!("Collateral amount: {}", collateral_amount);
+
         let collateral_value = (price.price as u128)
-            .checked_mul(10_u128.pow(price.exponent.abs() as u32))
-            .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_mul(collateral_amount as u128)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        .checked_mul(10_u128.pow(price.exponent.abs() as u32))  // This is correct!
+        .ok_or(ArithmeticError::ArithmeticOverflow)?
+        .checked_mul(collateral_amount as u128)
+        .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        msg!("First multiplication successful: {}", collateral_value);
+
+        msg!("Debt amount: {}", debt_amount);
+        msg!("Collateral value: {}", collateral_value);
 
         let ltv = (debt_amount as u128)
             .checked_mul(10000)
@@ -107,7 +128,10 @@ impl<'info> OpenPosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
+            msg!("Calculated LTV: {}", ltv);
         require!(ltv <= MAX_LTV, PositionError::InvalidLTV);
+
+        msg!("LTV check passed");
 
         self.position.set_inner(Position {
             user: self.user.key(),

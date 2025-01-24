@@ -11,7 +11,7 @@ const baseRate = 100;
 const sigma = 20;
 const stablecoinPriceFeed = "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
 const collateralAmount = new BN(0.1*LAMPORTS_PER_SOL);
-const debtAmount = new BN(1);
+const debtAmount = new BN(10);
 const JITO_SOL_PRICE_FEED_ID = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb";
 
 const JITO_SOL_PYTH_ACCOUNT = new PublicKey("AxaxyeDT8JnWERSaTKvFXvPKkEdxnamKSqpWbsSjYg1g");

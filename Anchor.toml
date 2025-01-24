@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-cdp_stablecoin_protocol = "BvMWoXUSWLR4udmcmPX5M9DM89kCCJJvQWvxKE55uBGH"
+cdp_stablecoin_protocol = "3xYBiBikqqFRLKJbctJ1ByaKr1cHGbBdhj9BSUTuTECa"
 
 [registry]
 url = "https://api.apr.dev"

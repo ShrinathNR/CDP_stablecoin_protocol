@@ -58,6 +58,9 @@ impl<'info> InitializeCollateralVault<'info> {
         collateral_price_feed: String,
         bumps: &InitializeCollateralVaultBumps,
     ) -> Result<()> {
+
+        msg!("collateral price feed is {}", collateral_price_feed);
+        msg!("collateral price feed len is {}", collateral_price_feed.len());
         self.collateral_vault_config.set_inner(CollateralConfig {
             mint: self.collateral_mint.key(),
             collateral_price_feed,
@@ -66,6 +69,11 @@ impl<'info> InitializeCollateralVault<'info> {
             bump: bumps.collateral_vault_config,
             vault_bump: bumps.collateral_vault,
         });
+
+        msg!("collateral price feed after init is {}",self.collateral_vault_config.collateral_price_feed);
+        msg!("collateral price feed len after init is {}",self.collateral_vault_config.collateral_price_feed.len());
+
+        
 
         Ok(())
     }
