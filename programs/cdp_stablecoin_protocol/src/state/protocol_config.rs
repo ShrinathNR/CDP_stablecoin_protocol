@@ -1,4 +1,4 @@
-use crate::{errors::ArithmeticError, state::Position, constants::INTEREST_SCALE};
+use crate::{constants::INTEREST_SCALE, errors::ArithmeticError, state::Position};
 use anchor_lang::prelude::*;
 
 #[account]

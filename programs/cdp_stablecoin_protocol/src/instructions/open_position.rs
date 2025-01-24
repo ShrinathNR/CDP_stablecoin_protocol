@@ -10,7 +10,6 @@ use crate::{
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position, ProtocolConfig},
 };
-const FEED_ID: &str = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb";
 
 #[derive(Accounts)]
 pub struct OpenPosition<'info> {
@@ -84,43 +83,23 @@ pub struct OpenPosition<'info> {
 
 impl<'info> OpenPosition<'info> {
     pub fn open_position(&mut self, collateral_amount: u64, debt_amount: u64) -> Result<()> {
-        // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
-        // get_price_no_older_than will fail if the price update is more than 30 seconds old
         let price_feed = &self.price_feed;
-        msg!("feed_id raw bytes: {:?}", self.collateral_vault_config.collateral_price_feed.as_bytes());
-        msg!("feed_id length: {}", self.collateral_vault_config.collateral_price_feed.len());
-        msg!("feed_id is '{}'", self.collateral_vault_config.collateral_price_feed);
-        msg!("mint pubkey is '{}'", self.collateral_vault_config.mint);
-        msg!("bump is {}", self.collateral_vault_config.bump);
 
         // let maximum_age: u64 = 30;
 
         let feed_id: [u8; 32] =
             get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
 
-            msg!("Successfully got feed_id");
-
-        // let feed_id: [u8; 32] =
-        //     get_feed_id_from_hex(FEED_ID)?;
-
-
-        // msg!("feed_id is {}", feed_id);
         // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
         let price = price_feed.get_price_unchecked(&feed_id)?;
 
-        msg!("The price is ({} ± {}) * 10^{}", price.price, price.conf, price.exponent);
-
-        msg!("Collateral amount: {}", collateral_amount);
-
         let collateral_value = (price.price as u128)
-        .checked_mul(10_u128.pow(price.exponent.abs() as u32))  // This is correct!
-        .ok_or(ArithmeticError::ArithmeticOverflow)?
-        .checked_mul(collateral_amount as u128)
-        .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        msg!("First multiplication successful: {}", collateral_value);
-
-        msg!("Debt amount: {}", debt_amount);
-        msg!("Collateral value: {}", collateral_value);
+            .checked_mul(collateral_amount as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(10_u128.pow(price.exponent.abs() as u32))
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(LAMPORTS_PER_SOL as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         let ltv = (debt_amount as u128)
             .checked_mul(10000)
@@ -128,10 +107,7 @@ impl<'info> OpenPosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-            msg!("Calculated LTV: {}", ltv);
         require!(ltv <= MAX_LTV, PositionError::InvalidLTV);
-
-        msg!("LTV check passed");
 
         self.position.set_inner(Position {
             user: self.user.key(),
