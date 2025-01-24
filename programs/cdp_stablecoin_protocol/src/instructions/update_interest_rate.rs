@@ -1,6 +1,6 @@
 use crate::{
     constants::{
-        BPS_SCALE, INTEREST_SCALE, MAX_INTEREST_RATE, MIN_INTEREST_RATE, PRICE_SCALE,
+        BPS_SCALE, INTEREST_SCALE, MAX_INTEREST_RATE, MIN_INTEREST_RATE,
         YEAR_IN_SECONDS,
     },
     errors::ArithmeticError,
@@ -56,11 +56,12 @@ impl<'info> UpdateInterestRate<'info> {
     // Calculate interest rate based on price deviation from peg
     fn calculate_interest_rate(
         stablecoin_price: i64,
+        stablecoin_exponent: i32, 
         base_rate_bps: u16,
         sigma_bps: u16,
     ) -> Result<u128> {
         // Calculate price deviation from peg
-        let price_deviation: i128 = (PRICE_SCALE as i128)
+        let price_deviation: i128 = (10_i128.pow(stablecoin_exponent as u32))
             .checked_sub(stablecoin_price as i128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
@@ -74,7 +75,7 @@ impl<'info> UpdateInterestRate<'info> {
         x = x
             .checked_mul(INTEREST_SCALE as i128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            / (PRICE_SCALE as i128);
+            / (10_i128.pow(stablecoin_exponent as u32));
 
         // Calculate rate = base_rate * e^x
         let interest_rate: u128 = Self::exponential_approximation(x as u128, INTEREST_SCALE)?
@@ -149,6 +150,7 @@ impl<'info> UpdateInterestRate<'info> {
         // per second interest rate in yearly tearms, not compounded
         let new_interest_rate_yearly = Self::calculate_interest_rate(
             stablecoin_price.price,
+            stablecoin_price.exponent,
             self.protocol_config.base_rate,
             self.protocol_config.sigma,
         )?;
