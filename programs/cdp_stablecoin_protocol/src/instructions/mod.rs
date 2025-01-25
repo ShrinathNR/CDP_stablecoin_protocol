@@ -19,5 +19,5 @@ pub use stake_stability_pool::*;
 pub mod liquidate;
 pub use liquidate::*;
 
-pub mod transfer_stake_reward;
-pub use transfer_stake_reward::*;
+pub mod claim_stake_reward;
+pub use claim_stake_reward::*;

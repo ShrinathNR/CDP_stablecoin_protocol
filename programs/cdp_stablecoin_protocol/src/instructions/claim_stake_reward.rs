@@ -5,16 +5,13 @@ use anchor_spl::{
 };
 
 use crate::{
-    errors::ArithmeticError,
-    state::{ProtocolConfig, StakeAccount},
+    constants::BPS_SCALE, errors::ArithmeticError, state::{CollateralConfig, ProtocolConfig, StakeAccount}
 };
 
 #[derive(Accounts)]
-pub struct TransferStakeRewards<'info> {
+pub struct ClaimStakeRewards<'info> {
     #[account(mut)]
-    admin: Signer<'info>,
-
-    staker: SystemAccount<'info>,
+    staker: Signer<'info>,
 
     collateral_mint: Account<'info, Mint>,
 
@@ -37,7 +34,13 @@ pub struct TransferStakeRewards<'info> {
         associated_token::authority = staker,
     )]
     staker_ata: Box<Account<'info, TokenAccount>>,
-
+    
+    #[account(
+        seeds = [b"collateral", collateral_mint.key().as_ref()],
+        bump = collateral_vault_config.bump
+    )]
+    collateral_vault_config: Account<'info, CollateralConfig>,
+    
     #[account(
         mut,
         seeds = [b"liquidation_rewards_vault", collateral_mint.key().as_ref()],
@@ -68,8 +71,8 @@ pub struct TransferStakeRewards<'info> {
     system_program: Program<'info, System>,
 }
 
-impl<'info> TransferStakeRewards<'info> {
-    pub fn transfer_stake_reward(&mut self) -> Result<()> {
+impl<'info> ClaimStakeRewards<'info> {
+    pub fn claim_stake_reward(&mut self) -> Result<()> {
         let stake_reward_transfer_cpi_accounts = Transfer {
             from: self.liquidation_rewards_vault.to_account_info(),
             to: self.staker.to_account_info(),
@@ -85,15 +88,32 @@ impl<'info> TransferStakeRewards<'info> {
             signer_seeds,
         );
 
-        let amount = self
-            .liquidation_rewards_vault
-            .amount
-            .checked_mul(self.stake_account.points)
+        let amount = (self.stake_account.amount as u128)
+            .checked_mul(
+                self.collateral_vault_config.gain_summation
+                    .checked_sub(self.stake_account.init_gain_summation)
+                    .ok_or(ArithmeticError::ArithmeticOverflow)?
+            )
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(self.protocol_config.stake_points)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+            .checked_mul(BPS_SCALE as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? 
+            .checked_div(self.stake_account.init_deposit_depletion_factor as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
+            
 
         transfer(stake_reward_transfer_cpi_ctx, amount)?;
+
+        let updated_stake_amount = self.stake_account.amount
+            .checked_mul(self.collateral_vault_config.deposit_depletion_factor as u64)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? 
+            .checked_div(self.stake_account.init_deposit_depletion_factor as u64)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        self.stake_account.init_deposit_depletion_factor = self.collateral_vault_config.deposit_depletion_factor;
+
+        self.stake_account.init_gain_summation = self.collateral_vault_config.gain_summation;
+
+        self.stake_account.amount = updated_stake_amount;
 
         Ok(())
     }

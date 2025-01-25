@@ -66,7 +66,7 @@ impl<'info> Stake<'info> {
             amount,
             points: 0,
             init_deposit_depletion_factor: self.collateral_vault_config.deposit_depletion_factor,
-            init_gain_sum: self.collateral_vault_config.gain_summation,
+            init_gain_summation: self.collateral_vault_config.gain_summation,
             last_staked: Clock::get()?.unix_timestamp,
             bump: bumps.stake_account,
         });
