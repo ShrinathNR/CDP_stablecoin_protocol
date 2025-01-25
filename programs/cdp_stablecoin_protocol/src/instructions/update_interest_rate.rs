@@ -1,8 +1,5 @@
 use crate::{
-    constants::{
-        BPS_SCALE, INTEREST_SCALE, MAX_INTEREST_RATE, MIN_INTEREST_RATE,
-        YEAR_IN_SECONDS,
-    },
+    constants::{BPS_SCALE, INTEREST_SCALE, MAX_INTEREST_RATE, MIN_INTEREST_RATE, YEAR_IN_SECONDS},
     errors::ArithmeticError,
     state::ProtocolConfig,
 };
@@ -56,7 +53,7 @@ impl<'info> UpdateInterestRate<'info> {
     // Calculate interest rate based on price deviation from peg
     fn calculate_interest_rate(
         stablecoin_price: i64,
-        stablecoin_exponent: i32, 
+        stablecoin_exponent: i32,
         base_rate_bps: u16,
         sigma_bps: u16,
     ) -> Result<u128> {

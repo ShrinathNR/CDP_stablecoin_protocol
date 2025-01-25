@@ -1,7 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::{constants::BPS_SCALE, state::{CollateralConfig, ProtocolConfig}};
+use crate::{
+    constants::BPS_SCALE,
+    state::{CollateralConfig, ProtocolConfig},
+};
 
 #[derive(Accounts)]
 pub struct InitializeCollateralVault<'info> {

@@ -5,7 +5,9 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::BPS_SCALE, errors::ArithmeticError, state::{CollateralConfig, ProtocolConfig, StakeAccount}
+    constants::BPS_SCALE,
+    errors::ArithmeticError,
+    state::{CollateralConfig, ProtocolConfig, StakeAccount},
 };
 
 #[derive(Accounts)]
@@ -34,13 +36,13 @@ pub struct ClaimStakeRewards<'info> {
         associated_token::authority = staker,
     )]
     staker_ata: Box<Account<'info, TokenAccount>>,
-    
+
     #[account(
         seeds = [b"collateral", collateral_mint.key().as_ref()],
         bump = collateral_vault_config.bump
     )]
     collateral_vault_config: Account<'info, CollateralConfig>,
-    
+
     #[account(
         mut,
         seeds = [b"liquidation_rewards_vault", collateral_mint.key().as_ref()],
@@ -90,26 +92,29 @@ impl<'info> ClaimStakeRewards<'info> {
 
         let amount = (self.stake_account.amount as u128)
             .checked_mul(
-                self.collateral_vault_config.gain_summation
+                self.collateral_vault_config
+                    .gain_summation
                     .checked_sub(self.stake_account.init_gain_summation)
-                    .ok_or(ArithmeticError::ArithmeticOverflow)?
+                    .ok_or(ArithmeticError::ArithmeticOverflow)?,
             )
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_mul(BPS_SCALE as u128)
-            .ok_or(ArithmeticError::ArithmeticOverflow)? 
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(self.stake_account.init_deposit_depletion_factor as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
-            
 
         transfer(stake_reward_transfer_cpi_ctx, amount)?;
 
-        let updated_stake_amount = self.stake_account.amount
+        let updated_stake_amount = self
+            .stake_account
+            .amount
             .checked_mul(self.collateral_vault_config.deposit_depletion_factor as u64)
-            .ok_or(ArithmeticError::ArithmeticOverflow)? 
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(self.stake_account.init_deposit_depletion_factor as u64)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        self.stake_account.init_deposit_depletion_factor = self.collateral_vault_config.deposit_depletion_factor;
+        self.stake_account.init_deposit_depletion_factor =
+            self.collateral_vault_config.deposit_depletion_factor;
 
         self.stake_account.init_gain_summation = self.collateral_vault_config.gain_summation;
 

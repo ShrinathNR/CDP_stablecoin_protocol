@@ -103,7 +103,6 @@ impl<'info> Stake<'info> {
 
         self.protocol_config.total_stake_amount += amount as u128;
 
-
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;
 
