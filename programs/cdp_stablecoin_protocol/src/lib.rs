@@ -19,6 +19,7 @@ pub mod cdp_stablecoin_protocol {
         base_rate: u16,
         sigma: u16,
         stablecoin_price_feed: String,
+        revenue_share_to_stability_pool: u16,
     ) -> Result<()> {
         ctx.accounts.initialize_protocol_config(
             protocol_fee,
@@ -27,6 +28,7 @@ pub mod cdp_stablecoin_protocol {
             base_rate,
             sigma,
             stablecoin_price_feed,
+            revenue_share_to_stability_pool,
             &ctx.bumps,
         )
     }
@@ -74,5 +76,9 @@ pub mod cdp_stablecoin_protocol {
 
     pub fn claim_stake_reward(ctx: Context<ClaimStakeRewards>) -> Result<()> {
         ctx.accounts.claim_stake_reward()
+    }
+
+    pub fn withdraw_treasury(ctx: Context<WithdrawTreasury>) -> Result<()> {
+        ctx.accounts.withdraw_treasury()
     }
 }

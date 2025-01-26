@@ -6,7 +6,7 @@ use anchor_spl::{
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
-    constants::MAX_LTV,
+    constants::{MAX_LTV, UPFRONT_COST_INTEREST_PERIOD},
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position, ProtocolConfig},
 };
@@ -38,6 +38,22 @@ pub struct OpenPosition<'info> {
         bump = protocol_config.auth_bump
     )]
     auth: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        seeds = [b"treasury", stable_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    treasury_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    stake_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = collateral_mint,
@@ -82,7 +98,7 @@ pub struct OpenPosition<'info> {
 }
 
 impl<'info> OpenPosition<'info> {
-    pub fn open_position(&mut self, collateral_amount: u64, debt_amount: u64) -> Result<()> {
+    pub fn open_position(&mut self, collateral_amount: u64, mint_amount: u64) -> Result<()> {
         let price_feed = &self.price_feed;
 
         // let maximum_age: u64 = 30;
@@ -93,18 +109,46 @@ impl<'info> OpenPosition<'info> {
         // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
         let price = price_feed.get_price_unchecked(&feed_id)?;
 
+        let upfront_cost = mint_amount
+            .checked_mul(
+                (self.protocol_config.last_interest_rate
+                    .checked_mul(UPFRONT_COST_INTEREST_PERIOD as u128)
+                    .ok_or(ArithmeticError::ArithmeticOverflow)?
+                    / 365) as u64,
+            )
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        // Distribute upfront fees
+        self.protocol_config.distribute_revenue(
+            upfront_cost,
+            &self.stable_mint,
+            &self.treasury_vault,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+        )?;
+
+        let debt_amount = mint_amount
+            .checked_add(upfront_cost)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        let debt_value: u64 = debt_amount
+            .checked_div(10_u64.pow(self.stable_mint.decimals as u32)) // is thiscorrrect ??
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+
         let collateral_value = (price.price as u128)
             .checked_mul(collateral_amount as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(10_u128.pow(price.exponent.abs() as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(LAMPORTS_PER_SOL as u128)
+            .checked_div(LAMPORTS_PER_SOL as u128) // ! why ? many types of collateral
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        let ltv = (debt_amount as u128)
+        let ltv = (debt_value as u128) // !! this can get abused if user mints sub 1 usd mint positions and gets rounded down to 0 imo. got to calcualte ltv in one move
             .checked_mul(10000)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(collateral_value as u128)
+            .checked_div(collateral_value)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
         require!(ltv <= MAX_LTV, PositionError::InvalidLTV);
@@ -144,7 +188,6 @@ impl<'info> OpenPosition<'info> {
         };
 
         let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
-
         let signer_seeds = &[&seeds[..]];
 
         let stable_mint_cpi_ctx = CpiContext::new_with_signer(
@@ -153,7 +196,7 @@ impl<'info> OpenPosition<'info> {
             signer_seeds,
         );
 
-        mint_to(stable_mint_cpi_ctx, debt_amount)?;
+        mint_to(stable_mint_cpi_ctx, mint_amount)?;
 
         Ok(())
     }

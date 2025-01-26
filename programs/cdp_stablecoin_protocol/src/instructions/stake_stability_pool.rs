@@ -39,8 +39,7 @@ pub struct Stake<'info> {
     )]
     pub auth: UncheckedAccount<'info>,
     #[account(
-        init_if_needed,
-        payer = user,
+        mut,
         seeds = [b"stake_vault", stable_mint.key().as_ref()],
         token::mint = stable_mint,
         token::authority = auth,
@@ -92,8 +91,8 @@ impl<'info> Stake<'info> {
         let points = ((current_timestamp
             .checked_sub(self.stake_account.last_staked)
             .ok_or(ArithmeticError::ArithmeticOverflow)?)
-        .checked_div(86400)
-        .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
+            .checked_div(86400)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
             .checked_mul(self.stake_account.amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
@@ -139,8 +138,8 @@ impl<'info> Stake<'info> {
         let points = ((current_timestamp
             .checked_sub(self.stake_account.last_staked)
             .ok_or(ArithmeticError::ArithmeticOverflow)?)
-        .checked_div(86400)
-        .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
+            .checked_div(86400)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
             .checked_mul(self.stake_account.amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
