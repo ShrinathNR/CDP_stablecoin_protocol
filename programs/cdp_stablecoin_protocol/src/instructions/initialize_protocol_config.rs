@@ -60,7 +60,6 @@ impl<'info> InitializeProtocolConfig<'info> {
             last_interest_rate_update: Clock::get()?.unix_timestamp,
             total_debt: 0,
             total_stake_amount: 0,
-            stake_points: 0,
         });
 
         Ok(())

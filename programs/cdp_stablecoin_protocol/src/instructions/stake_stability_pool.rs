@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 
 use crate::{
-    errors::{ArithmeticError, StakeError},
+    errors::StakeError,
     state::{CollateralConfig, ProtocolConfig, StakeAccount},
 };
 
@@ -64,7 +64,6 @@ impl<'info> Stake<'info> {
         self.stake_account.set_inner(StakeAccount {
             user: self.user.key(),
             amount,
-            points: 0,
             init_deposit_depletion_factor: self.collateral_vault_config.deposit_depletion_factor,
             init_gain_summation: self.collateral_vault_config.gain_summation,
             last_staked: Clock::get()?.unix_timestamp,
@@ -88,18 +87,6 @@ impl<'info> Stake<'info> {
         transfer(cpi_ctx, amount)?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
-
-        let points = ((current_timestamp
-            .checked_sub(self.stake_account.last_staked)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?)
-        .checked_div(86400)
-        .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
-            .checked_mul(self.stake_account.amount)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?;
-
-        self.stake_account.points += points;
-
-        self.protocol_config.stake_points += points;
 
         self.protocol_config.total_stake_amount += amount as u128;
 
@@ -135,18 +122,6 @@ impl<'info> Stake<'info> {
         transfer(cpi_ctx, amount)?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
-
-        let points = ((current_timestamp
-            .checked_sub(self.stake_account.last_staked)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?)
-        .checked_div(86400)
-        .ok_or(ArithmeticError::ArithmeticOverflow)? as u64)
-            .checked_mul(self.stake_account.amount)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?;
-
-        self.stake_account.points += points;
-
-        self.protocol_config.stake_points += points;
 
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;
