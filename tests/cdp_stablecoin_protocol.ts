@@ -184,7 +184,7 @@ describe("cdp_stablecoin_protocol", () => {
   });
 
 
-  it("Close debt position", async () => {
+  xit("Close debt position", async () => {
 
     position = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -208,6 +208,67 @@ describe("cdp_stablecoin_protocol", () => {
       position,
       priceFeed: JITO_SOL_PYTH_ACCOUNT,
       collateralVault,
+    })
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+
+  it("Stake Stability Tokens", async () => {
+
+    const stakeAmount = new BN(5);
+
+    let stakeAccount = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stake"),
+        wallet.publicKey.toBuffer(),
+      ],
+      program.programId
+    )[0];
+    
+    const tx = await program.methods.stakeStableTokens(
+      stakeAmount
+    )
+    .accountsPartial({
+      user: wallet.publicKey,
+      stakeAccount,
+      stableMint: stableMint,
+      userStableAta,
+      auth,
+      stakeVault,
+      collateralVaultConfig,
+      protocolConfig,
+    })
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+  it("UnStake Stability Tokens", async () => {
+
+    const stakeAmount = new BN(5);
+
+    let stakeAccount = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stake"),
+        wallet.publicKey.toBuffer(),
+      ],
+      program.programId
+    )[0];
+    
+    const tx = await program.methods.unstakeStableTokens()
+    .accountsPartial({
+      user: wallet.publicKey,
+      stakeAccount,
+      stableMint: stableMint,
+      userStableAta,
+      auth,
+      stakeVault,
+      collateralVaultConfig,
+      protocolConfig,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})

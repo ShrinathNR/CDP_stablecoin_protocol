@@ -26,7 +26,7 @@ pub struct UnStake<'info> {
         associated_token::mint = stable_mint,
         associated_token::authority = user,
     )]
-    user_ata: Account<'info, TokenAccount>,
+    user_stable_ata: Account<'info, TokenAccount>,
 
     /// CHECK: This is an auth acc for the vault
     #[account(
@@ -54,16 +54,14 @@ pub struct UnStake<'info> {
 }
 
 impl<'info> UnStake<'info> {
-
     pub fn withdraw_tokens(&mut self, bumps: &UnStakeBumps) -> Result<()> {
-
         // Transfer tokens
         let cpi_program = self.token_program.to_account_info();
 
         let cpi_accounts = Transfer {
             from: self.stake_vault.to_account_info(),
-            to: self.user_ata.to_account_info(),
-            authority: self.auth.to_account_info(), //to be updated to Compute Labs wallet
+            to: self.user_stable_ata.to_account_info(),
+            authority: self.auth.to_account_info(),
         };
         let signer_seeds = &[&b"auth"[..], &[bumps.auth]];
         let binding = [&signer_seeds[..]];

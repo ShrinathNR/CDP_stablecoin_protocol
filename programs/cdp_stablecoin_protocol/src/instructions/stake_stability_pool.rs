@@ -27,7 +27,7 @@ pub struct Stake<'info> {
         associated_token::mint = stable_mint,
         associated_token::authority = user,
     )]
-    user_ata: Account<'info, TokenAccount>,
+    user_stable_ata: Account<'info, TokenAccount>,
 
     /// CHECK: This is an auth acc for the vault
     #[account(
@@ -73,7 +73,7 @@ impl<'info> Stake<'info> {
         let cpi_program = self.token_program.to_account_info();
 
         let cpi_accounts = Transfer {
-            from: self.user_ata.to_account_info(),
+            from: self.user_stable_ata.to_account_info(),
             to: self.stake_vault.to_account_info(),
             authority: self.user.to_account_info(),
         };
