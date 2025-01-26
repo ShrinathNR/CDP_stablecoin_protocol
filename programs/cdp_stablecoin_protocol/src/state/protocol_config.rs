@@ -18,6 +18,7 @@ pub struct ProtocolConfig {
     pub stablecoin_price_feed: String,
     pub total_debt: u128,
     pub total_stake_amount: u128,
+    pub deposit_depletion_factor: u16,
 }
 
 impl ProtocolConfig {

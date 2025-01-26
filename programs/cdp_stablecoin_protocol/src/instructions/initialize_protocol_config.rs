@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Mint, Token};
+use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::state::ProtocolConfig;
+use crate::{constants::BPS_SCALE, state::ProtocolConfig};
 
 #[derive(Accounts)]
 pub struct InitializeProtocolConfig<'info> {
@@ -24,13 +24,23 @@ pub struct InitializeProtocolConfig<'info> {
         mint::token_program = token_program,
         bump,
     )]
-    stable_mint: Account<'info, Mint>,
+    stable_mint: Box<Account<'info, Mint>>,
     /// CHECK: This is an auth acc for the vault
     #[account(
+        mut,
         seeds = [b"auth"],
         bump
     )]
     auth: UncheckedAccount<'info>,
+    #[account(
+        init,
+        payer = admin,
+        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    stake_vault: Box<Account<'info, TokenAccount>>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
 }
@@ -58,6 +68,7 @@ impl<'info> InitializeProtocolConfig<'info> {
             cumulative_interest_rate: ProtocolConfig::INITIAL_CUMULATIVE_RATE,
             stablecoin_price_feed,
             last_interest_rate_update: Clock::get()?.unix_timestamp,
+            deposit_depletion_factor: BPS_SCALE,
             total_debt: 0,
             total_stake_amount: 0,
         });

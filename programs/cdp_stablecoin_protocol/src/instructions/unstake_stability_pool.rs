@@ -7,14 +7,13 @@ use anchor_spl::{
 use crate::state::{CollateralConfig, ProtocolConfig, StakeAccount};
 
 #[derive(Accounts)]
-pub struct Stake<'info> {
+pub struct UnStake<'info> {
     #[account(mut)]
     user: Signer<'info>,
     #[account(
-        init,
-        payer = user,
+        mut,
+        close = user,
         seeds = [b"stake", user.key().as_ref()],
-        space = 8 + StakeAccount::INIT_SPACE,
         bump,
     )]
     stake_account: Account<'info, StakeAccount>,
@@ -54,43 +53,32 @@ pub struct Stake<'info> {
     associated_token_program: Program<'info, AssociatedToken>,
 }
 
-impl<'info> Stake<'info> {
-    pub fn init_stake_account(&mut self, amount: u64, bumps: &StakeBumps) -> Result<()> {
-        // Set the stake account
-        self.stake_account.set_inner(StakeAccount {
-            user: self.user.key(),
-            amount,
-            init_deposit_depletion_factor: self.protocol_config.deposit_depletion_factor,
-            init_gain_summation: self.collateral_vault_config.gain_summation,
-            last_staked: Clock::get()?.unix_timestamp,
-            bump: bumps.stake_account,
-        });
+impl<'info> UnStake<'info> {
 
-        Ok(())
-    }
-    pub fn deposit_tokens(&mut self, amount: u64) -> Result<()> {
+    pub fn withdraw_tokens(&mut self, bumps: &UnStakeBumps) -> Result<()> {
+
         // Transfer tokens
         let cpi_program = self.token_program.to_account_info();
 
         let cpi_accounts = Transfer {
-            from: self.user_ata.to_account_info(),
-            to: self.stake_vault.to_account_info(),
-            authority: self.user.to_account_info(),
+            from: self.stake_vault.to_account_info(),
+            to: self.user_ata.to_account_info(),
+            authority: self.auth.to_account_info(), //to be updated to Compute Labs wallet
         };
+        let signer_seeds = &[&b"auth"[..], &[bumps.auth]];
+        let binding = [&signer_seeds[..]];
 
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, &binding);
 
-        transfer(cpi_ctx, amount)?;
+        transfer(cpi_ctx, self.stake_vault.amount)?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
-
-        self.protocol_config.total_stake_amount += amount as u128;
 
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;
 
         // Update staked amount
-        self.stake_account.amount += amount;
+        self.stake_account.amount = 0;
 
         Ok(())
     }

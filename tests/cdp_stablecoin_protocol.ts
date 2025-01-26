@@ -62,8 +62,6 @@ describe("cdp_stablecoin_protocol", () => {
     program.programId
   )[0];
 
-  
-
   const stableMint = anchor.web3.PublicKey.findProgramAddressSync(
     [
       Buffer.from("stable"),
@@ -71,6 +69,14 @@ describe("cdp_stablecoin_protocol", () => {
     program.programId
   )[0];
   // const stableMint = Keypair.generate()
+
+  const stakeVault = anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("stake_vault"),
+      stableMint.toBuffer()
+    ],
+    program.programId
+  )[0];
 
   it("Create Collateral Mint and mint tokens", async() => {
     collateralMint = await createMint(provider.connection, wallet.payer, wallet.publicKey, wallet.publicKey, 6);
@@ -113,8 +119,9 @@ describe("cdp_stablecoin_protocol", () => {
     .accountsPartial({
       admin: wallet.publicKey,
       protocolConfig,
-      auth,
       stableMint: stableMint,
+      auth,
+      stakeVault,
     })
     .signers([wallet.payer])
     .rpc()

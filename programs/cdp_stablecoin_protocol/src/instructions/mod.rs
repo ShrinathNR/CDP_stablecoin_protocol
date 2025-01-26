@@ -16,6 +16,9 @@ pub use update_interest_rate::*;
 pub mod stake_stability_pool;
 pub use stake_stability_pool::*;
 
+pub mod unstake_stability_pool;
+pub use unstake_stability_pool::*;
+
 pub mod liquidate;
 pub use liquidate::*;
 

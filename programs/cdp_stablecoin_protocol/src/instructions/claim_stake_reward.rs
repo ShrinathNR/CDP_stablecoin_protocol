@@ -108,13 +108,13 @@ impl<'info> ClaimStakeRewards<'info> {
         let updated_stake_amount = self
             .stake_account
             .amount
-            .checked_mul(self.collateral_vault_config.deposit_depletion_factor as u64)
+            .checked_mul(self.protocol_config.deposit_depletion_factor as u64)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(self.stake_account.init_deposit_depletion_factor as u64)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         self.stake_account.init_deposit_depletion_factor =
-            self.collateral_vault_config.deposit_depletion_factor;
+            self.protocol_config.deposit_depletion_factor;
 
         self.stake_account.init_gain_summation = self.collateral_vault_config.gain_summation;
 

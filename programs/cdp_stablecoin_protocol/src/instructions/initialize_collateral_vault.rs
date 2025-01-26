@@ -1,10 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::{
-    constants::BPS_SCALE,
-    state::{CollateralConfig, ProtocolConfig},
-};
+use crate::state::{CollateralConfig, ProtocolConfig};
 
 #[derive(Accounts)]
 pub struct InitializeCollateralVault<'info> {
@@ -67,7 +64,6 @@ impl<'info> InitializeCollateralVault<'info> {
             vault: self.collateral_vault.key(),
             collateral_amount: 0,
             stability_pool_rewards_amount: 0,
-            deposit_depletion_factor: BPS_SCALE,
             gain_summation: 0,
             bump: bumps.collateral_vault_config,
             vault_bump: bumps.collateral_vault,
