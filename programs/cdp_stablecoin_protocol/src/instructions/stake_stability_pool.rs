@@ -48,6 +48,12 @@ pub struct Stake<'info> {
         bump = collateral_vault_config.bump
     )]
     collateral_vault_config: Box<Account<'info, CollateralConfig>>,
+
+    #[account(
+        mut,
+        seeds = [b"config"],
+        bump = protocol_config.bump
+    )]
     protocol_config: Account<'info, ProtocolConfig>,
     system_program: Program<'info, System>,
     token_program: Program<'info, Token>,
@@ -84,7 +90,13 @@ impl<'info> Stake<'info> {
 
         let current_timestamp = Clock::get()?.unix_timestamp;
 
+        msg!("amount staked {}", amount);
+
+        msg!("total stake amount in protocol  before update is {}", self.protocol_config.total_stake_amount);
+
         self.protocol_config.total_stake_amount += amount as u128;
+
+        msg!("total stake amount in protocol config updated to {}", self.protocol_config.total_stake_amount);
 
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;

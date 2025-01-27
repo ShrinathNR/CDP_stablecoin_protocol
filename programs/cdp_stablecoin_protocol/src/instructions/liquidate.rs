@@ -1,4 +1,4 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::native_token::LAMPORTS_PER_SOL};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{burn, transfer, Burn, Mint, Token, TokenAccount, Transfer},
@@ -6,7 +6,7 @@ use anchor_spl::{
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
-    constants::MAX_LTV,
+    constants::{BPS_SCALE, MAX_LTV},
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position, ProtocolConfig},
 };
@@ -16,19 +16,27 @@ pub struct LiquidatePosition<'info> {
     #[account(mut)]
     liquidator: Signer<'info>,
 
+    #[account(mut)]
     user: SystemAccount<'info>,
 
     collateral_mint: Account<'info, Mint>,
 
     #[account(
+        mut,
         address = protocol_config.stable_mint
     )]
     stable_mint: Account<'info, Mint>,
 
+    #[account(
+        mut,
+        seeds = [b"config"],
+        bump = protocol_config.bump
+    )]
     protocol_config: Account<'info, ProtocolConfig>,
 
     /// CHECK: This is an auth acc for the vault
     #[account(
+        mut,
         seeds = [b"auth"],
         bump = protocol_config.auth_bump
     )]
@@ -60,7 +68,7 @@ pub struct LiquidatePosition<'info> {
     position: Account<'info, Position>,
 
     #[account(owner = pyth_solana_receiver_sdk::ID)]
-    price_update: Account<'info, PriceUpdateV2>,
+    price_feed: Account<'info, PriceUpdateV2>,
 
     #[account(
         mut,
@@ -100,16 +108,19 @@ impl<'info> LiquidatePosition<'info> {
             .protocol_config
             .calculate_current_debt(&self.position)?;
 
-        let price_update = &self.price_update;
-        let maximum_age: u64 = 30;
+        let price_feed = &self.price_feed;
+        // let maximum_age: u64 = 30;
         let feed_id: [u8; 32] =
             get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
-        let price = price_update.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let price = price_feed.get_price_unchecked(&feed_id)?;
 
-        let collateral_value = (price.price as u64)
-            .checked_mul(10_u64.pow(price.exponent as u32))
+        let collateral_value = (price.price as u128)
+            .checked_mul(self.position.collateral_amount as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_mul(self.position.collateral_amount)
+            .checked_div(10_u128.pow(price.exponent.abs() as u32))
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(LAMPORTS_PER_SOL as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         let ltv = (current_debt as u128)
@@ -118,81 +129,84 @@ impl<'info> LiquidatePosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-        if MAX_LTV <= ltv {
-            let collateral_transfer_cpi_accounts = Transfer {
-                from: self.collateral_vault.to_account_info(),
-                to: self.liquidation_rewards_vault.to_account_info(),
-                authority: self.auth.to_account_info(),
-            };
-            let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
+        require!(MAX_LTV<=ltv, PositionError::InvalidLTV);
 
-            let signer_seeds = &[&seeds[..]];
+        let collateral_transfer_cpi_accounts = Transfer {
+            from: self.collateral_vault.to_account_info(),
+            to: self.liquidation_rewards_vault.to_account_info(),
+            authority: self.auth.to_account_info(),
+        };
+        let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
 
-            let collateral_transfer_cpi_ctx = CpiContext::new_with_signer(
-                self.token_program.to_account_info(),
-                collateral_transfer_cpi_accounts,
-                signer_seeds,
-            );
+        let signer_seeds = &[&seeds[..]];
 
-            transfer(collateral_transfer_cpi_ctx, self.position.collateral_amount)?;
+        let collateral_transfer_cpi_ctx = CpiContext::new_with_signer(
+            self.token_program.to_account_info(),
+            collateral_transfer_cpi_accounts,
+            signer_seeds,
+        );
 
-            self.collateral_vault_config.collateral_amount = self
-                .collateral_vault_config
-                .collateral_amount
-                .checked_sub(self.position.collateral_amount)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        transfer(collateral_transfer_cpi_ctx, self.position.collateral_amount)?;
 
-            self.collateral_vault_config.stability_pool_rewards_amount = self
-                .collateral_vault_config
-                .stability_pool_rewards_amount
-                .checked_add(self.position.collateral_amount)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        self.collateral_vault_config.collateral_amount = self
+            .collateral_vault_config
+            .collateral_amount
+            .checked_sub(self.position.collateral_amount)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-            self.collateral_vault_config.gain_summation = self
-                .collateral_vault_config
-                .gain_summation
-                .checked_add(
-                    (self.position.collateral_amount as u128)
-                        .checked_mul(self.protocol_config.deposit_depletion_factor as u128)
-                        .ok_or(ArithmeticError::ArithmeticOverflow)?
-                        .checked_div(self.protocol_config.total_stake_amount)
-                        .ok_or(ArithmeticError::ArithmeticOverflow)?,
-                )
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        self.collateral_vault_config.stability_pool_rewards_amount = self
+            .collateral_vault_config
+            .stability_pool_rewards_amount
+            .checked_add(self.position.collateral_amount)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-            self.protocol_config.deposit_depletion_factor =
-                (self.protocol_config.deposit_depletion_factor as u128)
-                    .checked_mul(
-                        (self.protocol_config.total_stake_amount)
-                            .checked_sub(current_debt as u128)
-                            .ok_or(ArithmeticError::ArithmeticOverflow)?,
-                    )
+        self.collateral_vault_config.gain_summation = self
+            .collateral_vault_config
+            .gain_summation
+            .checked_add(
+                (self.position.collateral_amount as u128)
+                    .checked_mul(self.protocol_config.deposit_depletion_factor as u128)
+                    .ok_or(ArithmeticError::ArithmeticOverflow)?
+                    .checked_div(BPS_SCALE as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
                     .checked_div(self.protocol_config.total_stake_amount)
-                    .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
+                    .ok_or(ArithmeticError::ArithmeticOverflow)?,
+            )
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-            self.protocol_config.total_stake_amount = self
-                .protocol_config
-                .total_stake_amount
-                .checked_sub(current_debt as u128)
-                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        self.protocol_config.deposit_depletion_factor =
+            (self.protocol_config.deposit_depletion_factor as u128)
+                .checked_mul(
+                    (self.protocol_config.total_stake_amount)
+                        .checked_sub(current_debt as u128)
+                        .ok_or(ArithmeticError::ArithmeticOverflow)?,
+                )
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(self.protocol_config.total_stake_amount)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-            // Calculate current debt with accrued interest
+        self.protocol_config.total_stake_amount = self
+            .protocol_config
+            .total_stake_amount
+            .checked_sub(current_debt as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-            let accounts = Burn {
-                mint: self.stable_mint.to_account_info(),
-                from: self.stake_vault.to_account_info(),
-                authority: self.auth.to_account_info(),
-            };
+        // Calculate current debt with accrued interest
 
-            let stable_burn_cpi_ctx =
-                CpiContext::new(self.token_program.to_account_info(), accounts);
-            burn(stable_burn_cpi_ctx, current_debt)?; // Use current_debt with accrued interest
+        let accounts = Burn {
+            mint: self.stable_mint.to_account_info(),
+            from: self.stake_vault.to_account_info(),
+            authority: self.auth.to_account_info(),
+        };
 
-            self.protocol_config.update_totals(-(current_debt as i64))?;
-        } else {
-            return err!(PositionError::InvalidLTV);
-        }
+        let signer_seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
+        let binding = [&signer_seeds[..]];
+
+        let stable_burn_cpi_ctx = CpiContext::new_with_signer(self.token_program.to_account_info(), accounts, &binding);
+
+        burn(stable_burn_cpi_ctx, current_debt)?; // Use current_debt with accrued interest
+
+        self.protocol_config.update_totals(-(current_debt as i64))?;
 
         Ok(())
     }

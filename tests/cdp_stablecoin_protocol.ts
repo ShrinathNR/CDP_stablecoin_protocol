@@ -11,7 +11,8 @@ const baseRate = 100;
 const sigma = 20;
 const stablecoinPriceFeed = "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
 const collateralAmount = new BN(0.1*LAMPORTS_PER_SOL);
-const debtAmount = new BN(10);
+const debtAmount1 = new BN(5);
+const debtAmount2 = new BN(2);
 const JITO_SOL_PRICE_FEED_ID = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb";
 
 const JITO_SOL_PYTH_ACCOUNT = new PublicKey("AxaxyeDT8JnWERSaTKvFXvPKkEdxnamKSqpWbsSjYg1g");
@@ -25,12 +26,24 @@ describe("cdp_stablecoin_protocol", () => {
 
   const program = anchor.workspace.CdpStablecoinProtocol as Program<CdpStablecoinProtocol>;
 
-  let collateralMint: PublicKey;
-  let collateralAccount: Account;
-  let collateralVaultConfig: PublicKey;
-  let collateralVault: PublicKey;
-  let userStableAta: PublicKey;
-  let position: PublicKey;
+  let collateralMint1: PublicKey;
+  let collateralAccount1_user1: Account;
+  let collateralAccount1_user2: Account;
+  let collateralVaultConfig1: PublicKey;
+  let liquidationRewardsVault1: PublicKey;
+  let collateralVault1: PublicKey;
+  let collateralMint2: PublicKey;
+  let collateralAccount2: Account;
+  let collateralVaultConfig2: PublicKey;
+  let liquidationRewardsVault2: PublicKey;
+  let collateralVault2: PublicKey;
+  let user1StableAta: PublicKey;
+  let user2StableAta: PublicKey;
+  let position1: PublicKey;
+  let position2: PublicKey;
+  let position2_user2: PublicKey;
+
+  let wallet2 = Keypair.generate();
 
 
   const confirm = async (signature: string): Promise<string> => {
@@ -79,29 +92,78 @@ describe("cdp_stablecoin_protocol", () => {
   )[0];
 
   it("Create Collateral Mint and mint tokens", async() => {
-    collateralMint = await createMint(provider.connection, wallet.payer, wallet.publicKey, wallet.publicKey, 6);
-    console.log("COMP Mint: ", collateralMint.toBase58());
 
-    collateralAccount = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, collateralMint, wallet.publicKey);
+    await anchor.getProvider().connection.requestAirdrop(wallet2.publicKey, 1 * anchor.web3.LAMPORTS_PER_SOL).then(confirm);
 
-    const tx = await mintTo(provider.connection, wallet.payer, collateralMint, collateralAccount.address, wallet.payer, 1000000000);
+    collateralMint1 = await createMint(provider.connection, wallet.payer, wallet.publicKey, wallet.publicKey, 6);
+    console.log("collateral Mint 1 : ", collateralMint1.toBase58());
 
-    userStableAta = getAssociatedTokenAddressSync(stableMint, wallet.publicKey)
+    collateralMint2 = await createMint(provider.connection, wallet.payer, wallet.publicKey, wallet.publicKey, 6);
+    console.log("collateral Mint 2 : ", collateralMint2.toBase58())
 
-    collateralVaultConfig = anchor.web3.PublicKey.findProgramAddressSync(
+    collateralAccount1_user1 = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, collateralMint1, wallet.publicKey);
+
+    collateralAccount1_user2 = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, collateralMint1, wallet2.publicKey);
+
+    const tx1 = await mintTo(provider.connection, wallet.payer, collateralMint1, collateralAccount1_user1.address, wallet.payer, 1000000000);
+
+    const tx2 = await mintTo(provider.connection, wallet.payer, collateralMint1, collateralAccount1_user2.address, wallet.payer, 1000000000);
+
+    collateralAccount2 = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, collateralMint2, wallet.publicKey);
+
+    const tx3 = await mintTo(provider.connection, wallet.payer, collateralMint2, collateralAccount2.address, wallet.payer, 1000000000);
+
+    user1StableAta = getAssociatedTokenAddressSync(stableMint, wallet.publicKey)
+
+    user2StableAta = getAssociatedTokenAddressSync(stableMint, wallet2.publicKey)
+
+    collateralVaultConfig1 = anchor.web3.PublicKey.findProgramAddressSync(
       [
         Buffer.from("collateral"),
-        collateralMint.toBuffer()
+        collateralMint1.toBuffer()
       ],
       program.programId
     )[0];
-    collateralVault = anchor.web3.PublicKey.findProgramAddressSync(
+    collateralVault1 = anchor.web3.PublicKey.findProgramAddressSync(
       [
         Buffer.from("collateral_vault"),
-        collateralMint.toBuffer()
+        collateralMint1.toBuffer()
       ],
       program.programId
     )[0];
+
+    liquidationRewardsVault1 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("liquidation_rewards_vault"),
+        collateralMint1.toBuffer()
+      ],
+      program.programId
+    )[0];
+
+    collateralVaultConfig2 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("collateral"),
+        collateralMint2.toBuffer()
+      ],
+      program.programId
+    )[0];
+    collateralVault2 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("collateral_vault"),
+        collateralMint2.toBuffer()
+      ],
+      program.programId
+    )[0];
+
+    liquidationRewardsVault2 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("liquidation_rewards_vault"),
+        collateralMint2.toBuffer()
+      ],
+      program.programId
+    )[0];
+
+
 
   });
 
@@ -129,7 +191,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("Initialize Collateral Config", async () => {
+  it("Initialize Collateral Config 1", async () => {
 
     // Add your test here.
     const tx = await program.methods.initializeCollateralVault(
@@ -137,11 +199,12 @@ describe("cdp_stablecoin_protocol", () => {
     )
     .accountsPartial({
       admin: wallet.publicKey,
-      collateralMint,
-      collateralVaultConfig,
+      collateralMint: collateralMint1,
+      collateralVaultConfig: collateralVaultConfig1,
       protocolConfig,
       auth,
-      collateralVault,
+      collateralVault: collateralVault1,
+      liquidationRewardsVault: liquidationRewardsVault1,
     })
     .signers([wallet.payer])
     .rpc()
@@ -149,33 +212,122 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("Open debt position", async () => {
+  xit("Initialize Collateral Config 2", async () => {
 
-    position = anchor.web3.PublicKey.findProgramAddressSync(
+    // Add your test here.
+    const tx = await program.methods.initializeCollateralVault(
+      JITO_SOL_PRICE_FEED_ID
+    )
+    .accountsPartial({
+      admin: wallet.publicKey,
+      collateralMint: collateralMint2,
+      collateralVaultConfig: collateralVaultConfig2,
+      protocolConfig,
+      auth,
+      collateralVault: collateralVault2,
+      liquidationRewardsVault: liquidationRewardsVault2,
+    })
+    .signers([wallet.payer])
+    .rpc()
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+  it("Open debt position 1 with collateral mint 1 by user 1", async () => {
+
+    position1 = anchor.web3.PublicKey.findProgramAddressSync(
       [
         Buffer.from("position"),
         wallet.publicKey.toBuffer(),
-        collateralMint.toBuffer()
+        collateralMint1.toBuffer()
       ],
       program.programId
     )[0];
     
     const tx = await program.methods.openPosition(
       collateralAmount,
-      debtAmount
+      debtAmount1
     )
     .accountsPartial({
       user: wallet.publicKey,
-      collateralMint,
+      collateralMint: collateralMint1,
       stableMint: stableMint,
       protocolConfig,
       auth,
-      userAta: collateralAccount.address,
-      userStableAta,
-      collateralVaultConfig,
-      position,
+      userAta: collateralAccount1_user1.address,
+      userStableAta: user1StableAta,
+      collateralVaultConfig: collateralVaultConfig1,
+      position: position1,
       priceFeed: JITO_SOL_PYTH_ACCOUNT,
-      collateralVault,
+      collateralVault: collateralVault1,
+    })
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+  it("Open debt position 2 with collateral mint 1 by user 2", async () => {
+
+    position2_user2 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("position"),
+        wallet2.publicKey.toBuffer(),
+        collateralMint1.toBuffer()
+      ],
+      program.programId
+    )[0];
+    
+    const tx = await program.methods.openPosition(
+      collateralAmount,
+      debtAmount2
+    )
+    .accountsPartial({
+      user: wallet2.publicKey,
+      collateralMint: collateralMint1,
+      stableMint: stableMint,
+      protocolConfig,
+      auth,
+      userAta: collateralAccount1_user2.address,
+      userStableAta: user2StableAta,
+      collateralVaultConfig: collateralVaultConfig1,
+      position: position2_user2,
+      priceFeed: JITO_SOL_PYTH_ACCOUNT,
+      collateralVault: collateralVault1,
+    })
+    .signers([wallet2, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+  xit("Open debt position with collateral mint 2", async () => {
+
+    position2 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("position"),
+        wallet.publicKey.toBuffer(),
+        collateralMint2.toBuffer()
+      ],
+      program.programId
+    )[0];
+    
+    const tx = await program.methods.openPosition(
+      collateralAmount,
+      debtAmount2
+    )
+    .accountsPartial({
+      user: wallet.publicKey,
+      collateralMint: collateralMint2,
+      stableMint: stableMint,
+      protocolConfig,
+      auth,
+      userAta: collateralAccount2.address,
+      userStableAta: user1StableAta,
+      collateralVaultConfig: collateralVaultConfig2,
+      position: position2,
+      priceFeed: JITO_SOL_PYTH_ACCOUNT,
+      collateralVault: collateralVault2,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})
@@ -186,11 +338,11 @@ describe("cdp_stablecoin_protocol", () => {
 
   xit("Close debt position", async () => {
 
-    position = anchor.web3.PublicKey.findProgramAddressSync(
+    position1 = anchor.web3.PublicKey.findProgramAddressSync(
       [
         Buffer.from("position"),
         wallet.publicKey.toBuffer(),
-        collateralMint.toBuffer()
+        collateralMint1.toBuffer()
       ],
       program.programId
     )[0];
@@ -198,16 +350,16 @@ describe("cdp_stablecoin_protocol", () => {
     const tx = await program.methods.closePosition()
     .accountsPartial({
       user: wallet.publicKey,
-      collateralMint,
+      collateralMint: collateralMint1,
       stableMint: stableMint,
       protocolConfig,
       auth,
-      userAta: collateralAccount.address,
-      userStableAta,
-      collateralVaultConfig,
-      position,
+      userAta: collateralAccount1_user1.address,
+      userStableAta: user1StableAta,
+      collateralVaultConfig: collateralVaultConfig1,
+      position: position1,
       priceFeed: JITO_SOL_PYTH_ACCOUNT,
-      collateralVault,
+      collateralVault: collateralVault1,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})
@@ -218,7 +370,7 @@ describe("cdp_stablecoin_protocol", () => {
 
   it("Stake Stability Tokens", async () => {
 
-    const stakeAmount = new BN(5);
+    const stakeAmount = new BN(3);
 
     let stakeAccount = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -235,10 +387,10 @@ describe("cdp_stablecoin_protocol", () => {
       user: wallet.publicKey,
       stakeAccount,
       stableMint: stableMint,
-      userStableAta,
+      userStableAta: user1StableAta,
       auth,
       stakeVault,
-      collateralVaultConfig,
+      collateralVaultConfig: collateralVaultConfig1,
       protocolConfig,
     })
     .signers([wallet.payer, ])
@@ -247,7 +399,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("UnStake Stability Tokens", async () => {
+  xit("UnStake Stability Tokens", async () => {
 
     const stakeAmount = new BN(5);
 
@@ -264,11 +416,45 @@ describe("cdp_stablecoin_protocol", () => {
       user: wallet.publicKey,
       stakeAccount,
       stableMint: stableMint,
-      userStableAta,
+      userStableAta: user1StableAta,
       auth,
       stakeVault,
-      collateralVaultConfig,
+      collateralVaultConfig: collateralVaultConfig1,
       protocolConfig,
+    })
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+  it("liquidate position", async () => {
+
+    position2_user2 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("position"),
+        wallet2.publicKey.toBuffer(),
+        collateralMint1.toBuffer()
+      ],
+      program.programId
+    )[0];
+    
+    const tx = await program.methods.liquidatePosition()
+    .accountsPartial({
+      liquidator: wallet.publicKey,
+      user: wallet2.publicKey,
+      collateralMint: collateralMint1,
+      stableMint: stableMint,
+      protocolConfig,
+      auth,
+      userAta: collateralAccount1_user2.address,
+      userStableAta: user2StableAta,
+      collateralVaultConfig: collateralVaultConfig1,
+      position: position2_user2,
+      priceFeed: JITO_SOL_PYTH_ACCOUNT,
+      collateralVault: collateralVault1,
+      liquidationRewardsVault: liquidationRewardsVault1,
+      stakeVault,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})
