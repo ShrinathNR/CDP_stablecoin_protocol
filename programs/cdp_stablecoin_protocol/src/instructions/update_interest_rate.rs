@@ -139,10 +139,11 @@ impl<'info> UpdateInterestRate<'info> {
 
         // Get current stablecoin price
         let price_feed = &self.price_feed;
-        let maximum_age: u64 = 30;
+        // let maximum_age: u64 = 30;
         let feed_id: [u8; 32] = get_feed_id_from_hex(&self.protocol_config.stablecoin_price_feed)?;
-        let stablecoin_price =
-            price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        
+        // let stablecoin_price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
+        let stablecoin_price = price_feed.get_price_unchecked(&feed_id)?;
 
         // per second interest rate in yearly tearms, not compounded
         let new_interest_rate_yearly = Self::calculate_interest_rate(

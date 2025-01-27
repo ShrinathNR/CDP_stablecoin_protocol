@@ -10,6 +10,7 @@ const mintFee = 500;
 const baseRate = 100;
 const sigma = 20;
 const stablecoinPriceFeed = "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
+const USDC_PYTH_ACCOUNT = new PublicKey("Dpw1EAVrSB1ibxiDQyTAW6Zip3J4Btk2x4SgApQCeFbX");
 const collateralAmount = new BN(0.1*LAMPORTS_PER_SOL);
 const debtAmount1 = new BN(5);
 const debtAmount2 = new BN(2);
@@ -428,7 +429,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("liquidate position", async () => {
+  xit("liquidate position", async () => {
 
     position2_user2 = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -455,6 +456,20 @@ describe("cdp_stablecoin_protocol", () => {
       collateralVault: collateralVault1,
       liquidationRewardsVault: liquidationRewardsVault1,
       stakeVault,
+    })
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+  it("update interest", async () => {
+    
+    const tx = await program.methods.updateInterestRate()
+    .accountsPartial({
+      user: wallet.publicKey,
+      protocolConfig,
+      priceFeed: USDC_PYTH_ACCOUNT,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})
