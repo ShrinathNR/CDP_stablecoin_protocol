@@ -1,6 +1,6 @@
 # Fixed point scale factors
 YEAR_IN_SECONDS = 365 * 24 * 60 * 60  # Seconds in a year
-PRICE_SCALE = 1_000_000  # 6 decimals for price
+PRICE_SCALE = 100_000_000  # 6 decimals for price
 BPS_SCALE = 10_000  # Basis points (100% = 10000)
 INTEREST_SCALE = 1_000_000_000_000_000_000  # 1e18 for interest
 MIN_INTEREST_RATE = INTEREST_SCALE // 100  # 1% APR
