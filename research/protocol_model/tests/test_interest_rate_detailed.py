@@ -50,18 +50,20 @@ def exponential_approximation_rust(x: int, scale: int) -> int:
     """Exact port of Rust exponential_approximation"""
     # first term: 1
     result = scale
+    print(f"First term: {result}")
 
     # second term: x
     result = checked_add(result, x)
-
+    print(f"After adding second term (x): {result}")
     # third term: x^2/2!
     x_squared = checked_div(checked_mul(x, x), scale)
     result = checked_add(result, x_squared // 2)
+    print("After adding third term (x^2/2!): ", result)
 
     # fourth term: x^3/3!
     x_cubed = checked_div(checked_mul(x_squared, x), scale)
     result = checked_add(result, x_cubed // 6)
-
+    print(f"Final result after fourth term: {result}")
     return result
 
 def calculate_interest_rate_rust(
@@ -86,6 +88,7 @@ def calculate_interest_rate_rust(
         checked_mul(exp_term, base_rate_bps),
         BPS_SCALE
     )
+    print(f"Final interest rate: {interest_rate}")
 
     # Clamp to min/max
     return interest_rate
@@ -172,6 +175,24 @@ def compound_interest_numpy(interest_rate: float, time_elapsed: int) -> float:
 def test_interest_rate_calculation():
     """Test interest rate responses to price deviations"""
     test_cases = [
+        TestCase(
+            description="0.006479% below peg",
+            stablecoin_price=int(PRICE_SCALE * 99993521 // 100000000),
+            base_rate_bps=500,  # 5%
+            sigma_bps=200,      # 2%
+            time_elapsed=1,
+            expected_rate_range=(Decimal('0.049'), Decimal('0.051')),
+            expected_debt_increase=(Decimal('1.0'), Decimal('1.0')) # not getting tested right now
+        ),
+        TestCase(
+            description="0.006479% above peg",
+            stablecoin_price=int(PRICE_SCALE * 1.00006479),
+            base_rate_bps=500,  # 5%
+            sigma_bps=200,      # 2%
+            time_elapsed=1,
+            expected_rate_range=(Decimal('0.049'), Decimal('0.051')),
+            expected_debt_increase=(Decimal('1.0'), Decimal('1.0')) # not getting tested right now
+        ),
         TestCase(
             description="At peg",
             stablecoin_price=PRICE_SCALE,

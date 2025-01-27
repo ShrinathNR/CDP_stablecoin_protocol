@@ -7,8 +7,8 @@ import { ASSOCIATED_TOKEN_PROGRAM_ID, Account, TOKEN_PROGRAM_ID, createMint, get
 const protocolFee = 500;
 const redemptionFee = 500;
 const mintFee = 500;
-const baseRate = 100;
-const sigma = 20;
+const baseRate = 500;
+const sigma = 200;
 const stablecoinPriceFeed = "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
 const USDC_PYTH_ACCOUNT = new PublicKey("Dpw1EAVrSB1ibxiDQyTAW6Zip3J4Btk2x4SgApQCeFbX");
 const collateralAmount = new BN(0.1*LAMPORTS_PER_SOL);
