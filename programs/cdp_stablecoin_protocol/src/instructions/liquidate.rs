@@ -160,10 +160,6 @@ impl<'info> LiquidatePosition<'info> {
             .checked_add(self.position.collateral_amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        msg!("total stake amount is {}", self.protocol_config.total_stake_amount);
-
-        msg!("current debt is {}", self.protocol_config.total_debt);
-
         self.collateral_vault_config.gain_summation = self
             .collateral_vault_config
             .gain_summation
@@ -178,8 +174,6 @@ impl<'info> LiquidatePosition<'info> {
             )
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        msg!("gain summation is updated to {}", self.collateral_vault_config.gain_summation);
-
         self.protocol_config.deposit_depletion_factor =
             (self.protocol_config.deposit_depletion_factor as u128)
                 .checked_mul(
@@ -190,8 +184,6 @@ impl<'info> LiquidatePosition<'info> {
                 .ok_or(ArithmeticError::ArithmeticOverflow)?
                 .checked_div(self.protocol_config.total_stake_amount)
                 .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
-
-        msg!("depletion is updated to {}", self.protocol_config.deposit_depletion_factor);
 
         self.protocol_config.total_stake_amount = self
             .protocol_config

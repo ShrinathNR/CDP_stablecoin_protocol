@@ -81,15 +81,6 @@ impl<'info> ClaimStakeRewards<'info> {
             signer_seeds,
         );
 
-        msg!("init gain summation : {}", self.stake_account.init_gain_summation);
-        msg!("init depletion factor : {}", self.stake_account.init_deposit_depletion_factor);
-
-        msg!("gain summation: {}", self.collateral_vault_config
-        .gain_summation);
-
-        msg!("user stake amount: {}", self.stake_account.amount);
-
-
         let amount = (self.stake_account.amount as u128)
             .checked_mul(
                 self.collateral_vault_config
@@ -103,9 +94,6 @@ impl<'info> ClaimStakeRewards<'info> {
             .checked_div(self.stake_account.init_deposit_depletion_factor as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
 
-        msg!("liquidation reward amount : {}", amount);
-        msg!("liquidation reward vault balance : {}", self.liquidation_rewards_vault.amount);
-
         transfer(stake_reward_transfer_cpi_ctx, amount)?;
 
         let updated_stake_amount = self
@@ -115,8 +103,6 @@ impl<'info> ClaimStakeRewards<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(self.stake_account.init_deposit_depletion_factor as u64)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
-
-        msg!("updated stake amount : {}", updated_stake_amount);
 
         self.stake_account.init_deposit_depletion_factor =
             self.protocol_config.deposit_depletion_factor;
