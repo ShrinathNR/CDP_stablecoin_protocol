@@ -129,7 +129,7 @@ impl<'info> LiquidatePosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-        require!(MAX_LTV<=ltv, PositionError::InvalidLTV);
+        require!(MAX_LTV <= ltv, PositionError::InvalidLTV);
 
         let collateral_transfer_cpi_accounts = Transfer {
             from: self.collateral_vault.to_account_info(),
@@ -181,9 +181,9 @@ impl<'info> LiquidatePosition<'info> {
                         .checked_sub(current_debt as u128)
                         .ok_or(ArithmeticError::ArithmeticOverflow)?,
                 )
-            .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(self.protocol_config.total_stake_amount)
-            .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
+                .ok_or(ArithmeticError::ArithmeticOverflow)?
+                .checked_div(self.protocol_config.total_stake_amount)
+                .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
         self.protocol_config.total_stake_amount = self
             .protocol_config
@@ -202,7 +202,8 @@ impl<'info> LiquidatePosition<'info> {
         let signer_seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
         let binding = [&signer_seeds[..]];
 
-        let stable_burn_cpi_ctx = CpiContext::new_with_signer(self.token_program.to_account_info(), accounts, &binding);
+        let stable_burn_cpi_ctx =
+            CpiContext::new_with_signer(self.token_program.to_account_info(), accounts, &binding);
 
         burn(stable_burn_cpi_ctx, current_debt)?; // Use current_debt with accrued interest
 

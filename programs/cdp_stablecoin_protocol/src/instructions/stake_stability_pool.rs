@@ -92,11 +92,17 @@ impl<'info> Stake<'info> {
 
         msg!("amount staked {}", amount);
 
-        msg!("total stake amount in protocol  before update is {}", self.protocol_config.total_stake_amount);
+        msg!(
+            "total stake amount in protocol  before update is {}",
+            self.protocol_config.total_stake_amount
+        );
 
         self.protocol_config.total_stake_amount += amount as u128;
 
-        msg!("total stake amount in protocol config updated to {}", self.protocol_config.total_stake_amount);
+        msg!(
+            "total stake amount in protocol config updated to {}",
+            self.protocol_config.total_stake_amount
+        );
 
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;
