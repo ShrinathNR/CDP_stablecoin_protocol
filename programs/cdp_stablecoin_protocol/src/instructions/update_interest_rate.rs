@@ -10,7 +10,11 @@ use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2
 pub struct UpdateInterestRate<'info> {
     #[account(mut)]
     user: Signer<'info>,
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"config"],
+        bump = protocol_config.bump
+    )]
     pub protocol_config: Account<'info, ProtocolConfig>,
 
     #[account(owner = pyth_solana_receiver_sdk::ID)]

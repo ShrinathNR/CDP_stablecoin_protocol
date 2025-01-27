@@ -13,16 +13,22 @@ use crate::{
 #[derive(Accounts)]
 pub struct ClaimStakeRewards<'info> {
     #[account(mut)]
-    staker: Signer<'info>,
+    user: Signer<'info>,
 
     collateral_mint: Account<'info, Mint>,
 
-    protocol_config: Account<'info, ProtocolConfig>,
+    #[account(
+        mut,
+        associated_token::mint = collateral_mint,
+        associated_token::authority = user,
+    )]
+    user_ata: Box<Account<'info, TokenAccount>>,
 
     #[account(
-        address = protocol_config.stable_mint
+        seeds = [b"config"],
+        bump = protocol_config.bump
     )]
-    stable_mint: Account<'info, Mint>,
+    protocol_config: Account<'info, ProtocolConfig>,
 
     /// CHECK: This is an auth acc for the vault
     #[account(
@@ -30,12 +36,6 @@ pub struct ClaimStakeRewards<'info> {
         bump = protocol_config.auth_bump
     )]
     auth: UncheckedAccount<'info>,
-    #[account(
-        mut,
-        associated_token::mint = collateral_mint,
-        associated_token::authority = staker,
-    )]
-    staker_ata: Box<Account<'info, TokenAccount>>,
 
     #[account(
         seeds = [b"collateral", collateral_mint.key().as_ref()],
@@ -54,16 +54,7 @@ pub struct ClaimStakeRewards<'info> {
 
     #[account(
         mut,
-        seeds = [b"stake_vault", stable_mint.key().as_ref()],
-        token::mint = stable_mint,
-        token::authority = auth,
-        bump
-    )]
-    pub stake_vault: Account<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        seeds = [b"stake", staker.key().as_ref()],
+        seeds = [b"stake", user.key().as_ref(), collateral_vault_config.mint.key().as_ref()],
         bump,
     )]
     pub stake_account: Account<'info, StakeAccount>,
@@ -77,7 +68,7 @@ impl<'info> ClaimStakeRewards<'info> {
     pub fn claim_stake_reward(&mut self) -> Result<()> {
         let stake_reward_transfer_cpi_accounts = Transfer {
             from: self.liquidation_rewards_vault.to_account_info(),
-            to: self.staker.to_account_info(),
+            to: self.user_ata.to_account_info(),
             authority: self.auth.to_account_info(),
         };
         let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
@@ -89,6 +80,15 @@ impl<'info> ClaimStakeRewards<'info> {
             stake_reward_transfer_cpi_accounts,
             signer_seeds,
         );
+
+        msg!("init gain summation : {}", self.stake_account.init_gain_summation);
+        msg!("init depletion factor : {}", self.stake_account.init_deposit_depletion_factor);
+
+        msg!("gain summation: {}", self.collateral_vault_config
+        .gain_summation);
+
+        msg!("user stake amount: {}", self.stake_account.amount);
+
 
         let amount = (self.stake_account.amount as u128)
             .checked_mul(
@@ -103,6 +103,9 @@ impl<'info> ClaimStakeRewards<'info> {
             .checked_div(self.stake_account.init_deposit_depletion_factor as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
 
+        msg!("liquidation reward amount : {}", amount);
+        msg!("liquidation reward vault balance : {}", self.liquidation_rewards_vault.amount);
+
         transfer(stake_reward_transfer_cpi_ctx, amount)?;
 
         let updated_stake_amount = self
@@ -112,6 +115,8 @@ impl<'info> ClaimStakeRewards<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(self.stake_account.init_deposit_depletion_factor as u64)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
+        msg!("updated stake amount : {}", updated_stake_amount);
 
         self.stake_account.init_deposit_depletion_factor =
             self.protocol_config.deposit_depletion_factor;

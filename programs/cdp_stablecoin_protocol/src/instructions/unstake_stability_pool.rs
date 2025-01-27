@@ -13,7 +13,7 @@ pub struct UnStake<'info> {
     #[account(
         mut,
         close = user,
-        seeds = [b"stake", user.key().as_ref()],
+        seeds = [b"stake", user.key().as_ref(), collateral_vault_config.mint.key().as_ref()],
         bump,
     )]
     stake_account: Account<'info, StakeAccount>,
@@ -36,7 +36,7 @@ pub struct UnStake<'info> {
     auth: UncheckedAccount<'info>,
     #[account(
         mut,
-        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_vault_config.mint.key().as_ref()],
         token::mint = stable_mint,
         token::authority = auth,
         bump

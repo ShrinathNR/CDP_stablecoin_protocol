@@ -19,7 +19,6 @@ pub struct InitializeCollateralVault<'info> {
     collateral_vault_config: Account<'info, CollateralConfig>,
 
     #[account(
-        mut,
         seeds = [b"config"],
         bump = protocol_config.bump
     )]
@@ -48,6 +47,22 @@ pub struct InitializeCollateralVault<'info> {
         bump
     )]
     liquidation_rewards_vault: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        address = protocol_config.stable_mint,
+        mint::decimals = 6,
+        mint::authority = auth,
+    )]
+    stable_mint: Box<Account<'info, Mint>>,
+    #[account(
+        init,
+        payer = admin,
+        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    stake_vault: Box<Account<'info, TokenAccount>>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
 }

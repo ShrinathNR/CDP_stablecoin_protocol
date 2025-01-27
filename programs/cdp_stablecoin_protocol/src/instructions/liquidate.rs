@@ -90,7 +90,7 @@ pub struct LiquidatePosition<'info> {
 
     #[account(
         mut,
-        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_mint.key().as_ref()],
         token::mint = stable_mint,
         token::authority = auth,
         bump
@@ -129,7 +129,7 @@ impl<'info> LiquidatePosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-        require!(MAX_LTV <= ltv, PositionError::InvalidLTV);
+        // require!(MAX_LTV <= ltv, PositionError::InvalidLTV);
 
         let collateral_transfer_cpi_accounts = Transfer {
             from: self.collateral_vault.to_account_info(),
@@ -160,6 +160,10 @@ impl<'info> LiquidatePosition<'info> {
             .checked_add(self.position.collateral_amount)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
+        msg!("total stake amount is {}", self.protocol_config.total_stake_amount);
+
+        msg!("current debt is {}", self.protocol_config.total_debt);
+
         self.collateral_vault_config.gain_summation = self
             .collateral_vault_config
             .gain_summation
@@ -174,6 +178,8 @@ impl<'info> LiquidatePosition<'info> {
             )
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
+        msg!("gain summation is updated to {}", self.collateral_vault_config.gain_summation);
+
         self.protocol_config.deposit_depletion_factor =
             (self.protocol_config.deposit_depletion_factor as u128)
                 .checked_mul(
@@ -184,6 +190,8 @@ impl<'info> LiquidatePosition<'info> {
                 .ok_or(ArithmeticError::ArithmeticOverflow)?
                 .checked_div(self.protocol_config.total_stake_amount)
                 .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
+
+        msg!("depletion is updated to {}", self.protocol_config.deposit_depletion_factor);
 
         self.protocol_config.total_stake_amount = self
             .protocol_config

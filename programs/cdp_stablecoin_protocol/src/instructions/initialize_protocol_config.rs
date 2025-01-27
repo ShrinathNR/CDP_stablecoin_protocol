@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Mint, Token, TokenAccount};
+use anchor_spl::token::{Mint, Token};
 
 use crate::{constants::BPS_SCALE, state::ProtocolConfig};
 
@@ -32,15 +32,6 @@ pub struct InitializeProtocolConfig<'info> {
         bump
     )]
     auth: UncheckedAccount<'info>,
-    #[account(
-        init,
-        payer = admin,
-        seeds = [b"stake_vault", stable_mint.key().as_ref()],
-        token::mint = stable_mint,
-        token::authority = auth,
-        bump
-    )]
-    stake_vault: Box<Account<'info, TokenAccount>>,
     token_program: Program<'info, Token>,
     system_program: Program<'info, System>,
 }

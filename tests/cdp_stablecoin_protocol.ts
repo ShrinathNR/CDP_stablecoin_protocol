@@ -43,6 +43,8 @@ describe("cdp_stablecoin_protocol", () => {
   let position1: PublicKey;
   let position2: PublicKey;
   let position2_user2: PublicKey;
+  let stakeVault1: PublicKey;
+  let stakeAccount1_user1: PublicKey;
 
   let wallet2 = Keypair.generate();
 
@@ -84,13 +86,6 @@ describe("cdp_stablecoin_protocol", () => {
   )[0];
   // const stableMint = Keypair.generate()
 
-  const stakeVault = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("stake_vault"),
-      stableMint.toBuffer()
-    ],
-    program.programId
-  )[0];
 
   it("Create Collateral Mint and mint tokens", async() => {
 
@@ -164,6 +159,23 @@ describe("cdp_stablecoin_protocol", () => {
       program.programId
     )[0];
 
+    stakeVault1 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stake_vault"),
+        stableMint.toBuffer(),
+        collateralMint1.toBuffer()
+      ],
+      program.programId
+    )[0];
+
+    stakeAccount1_user1 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stake"),
+        wallet.publicKey.toBuffer(),
+        collateralMint1.toBuffer()
+      ],
+      program.programId
+    )[0];
 
 
   });
@@ -184,7 +196,6 @@ describe("cdp_stablecoin_protocol", () => {
       protocolConfig,
       stableMint: stableMint,
       auth,
-      stakeVault,
     })
     .signers([wallet.payer])
     .rpc()
@@ -206,6 +217,8 @@ describe("cdp_stablecoin_protocol", () => {
       auth,
       collateralVault: collateralVault1,
       liquidationRewardsVault: liquidationRewardsVault1,
+      stakeVault: stakeVault1,
+      stableMint,
     })
     .signers([wallet.payer])
     .rpc()
@@ -372,25 +385,17 @@ describe("cdp_stablecoin_protocol", () => {
   it("Stake Stability Tokens", async () => {
 
     const stakeAmount = new BN(3);
-
-    let stakeAccount = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("stake"),
-        wallet.publicKey.toBuffer(),
-      ],
-      program.programId
-    )[0];
     
     const tx = await program.methods.stakeStableTokens(
       stakeAmount
     )
     .accountsPartial({
       user: wallet.publicKey,
-      stakeAccount,
+      stakeAccount: stakeAccount1_user1,
       stableMint: stableMint,
       userStableAta: user1StableAta,
       auth,
-      stakeVault,
+      stakeVault: stakeVault1,
       collateralVaultConfig: collateralVaultConfig1,
       protocolConfig,
     })
@@ -401,25 +406,15 @@ describe("cdp_stablecoin_protocol", () => {
   });
 
   xit("UnStake Stability Tokens", async () => {
-
-    const stakeAmount = new BN(5);
-
-    let stakeAccount = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("stake"),
-        wallet.publicKey.toBuffer(),
-      ],
-      program.programId
-    )[0];
     
     const tx = await program.methods.unstakeStableTokens()
     .accountsPartial({
       user: wallet.publicKey,
-      stakeAccount,
+      stakeAccount: stakeAccount1_user1,
       stableMint: stableMint,
       userStableAta: user1StableAta,
       auth,
-      stakeVault,
+      stakeVault: stakeVault1,
       collateralVaultConfig: collateralVaultConfig1,
       protocolConfig,
     })
@@ -429,7 +424,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  xit("liquidate position", async () => {
+  it("liquidate position", async () => {
 
     position2_user2 = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -455,7 +450,7 @@ describe("cdp_stablecoin_protocol", () => {
       priceFeed: JITO_SOL_PYTH_ACCOUNT,
       collateralVault: collateralVault1,
       liquidationRewardsVault: liquidationRewardsVault1,
-      stakeVault,
+      stakeVault: stakeVault1,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})
@@ -470,6 +465,26 @@ describe("cdp_stablecoin_protocol", () => {
       user: wallet.publicKey,
       protocolConfig,
       priceFeed: USDC_PYTH_ACCOUNT,
+    })
+    .signers([wallet.payer, ])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    console.log("Your transaction signature", tx);
+  });
+
+
+  it("withdraw liquidation reward", async () => {
+    
+    const tx = await program.methods.claimStakeReward()
+    .accountsPartial({
+      user: wallet.publicKey,
+      collateralMint: collateralMint1,
+      userAta: collateralAccount1_user1.address,
+      protocolConfig,
+      auth,
+      collateralVaultConfig: collateralVaultConfig1,
+      liquidationRewardsVault: liquidationRewardsVault1,
+      stakeAccount: stakeAccount1_user1,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})

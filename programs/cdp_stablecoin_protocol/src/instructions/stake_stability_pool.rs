@@ -13,7 +13,7 @@ pub struct Stake<'info> {
     #[account(
         init,
         payer = user,
-        seeds = [b"stake", user.key().as_ref()],
+        seeds = [b"stake", user.key().as_ref(), collateral_vault_config.mint.key().as_ref()],
         space = 8 + StakeAccount::INIT_SPACE,
         bump,
     )]
@@ -37,7 +37,7 @@ pub struct Stake<'info> {
     auth: UncheckedAccount<'info>,
     #[account(
         mut,
-        seeds = [b"stake_vault", stable_mint.key().as_ref()],
+        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_vault_config.mint.key().as_ref()],
         token::mint = stable_mint,
         token::authority = auth,
         bump
@@ -61,11 +61,11 @@ pub struct Stake<'info> {
 }
 
 impl<'info> Stake<'info> {
-    pub fn init_stake_account(&mut self, amount: u64, bumps: &StakeBumps) -> Result<()> {
+    pub fn init_stake_account(&mut self, bumps: &StakeBumps) -> Result<()> {
         // Set the stake account
         self.stake_account.set_inner(StakeAccount {
             user: self.user.key(),
-            amount,
+            amount: 0,
             init_deposit_depletion_factor: self.protocol_config.deposit_depletion_factor,
             init_gain_summation: self.collateral_vault_config.gain_summation,
             last_staked: Clock::get()?.unix_timestamp,
@@ -90,25 +90,13 @@ impl<'info> Stake<'info> {
 
         let current_timestamp = Clock::get()?.unix_timestamp;
 
-        msg!("amount staked {}", amount);
-
-        msg!(
-            "total stake amount in protocol  before update is {}",
-            self.protocol_config.total_stake_amount
-        );
-
-        self.protocol_config.total_stake_amount += amount as u128;
-
-        msg!(
-            "total stake amount in protocol config updated to {}",
-            self.protocol_config.total_stake_amount
-        );
-
         // Update last staked timestamp
         self.stake_account.last_staked = current_timestamp;
 
         // Update staked amount
         self.stake_account.amount += amount;
+
+        self.protocol_config.total_stake_amount += amount as u128;
 
         Ok(())
     }
