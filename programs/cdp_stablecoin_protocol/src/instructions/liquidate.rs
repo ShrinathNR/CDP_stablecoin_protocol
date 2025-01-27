@@ -129,7 +129,7 @@ impl<'info> LiquidatePosition<'info> {
             .checked_div(collateral_value as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
 
-        // require!(MAX_LTV <= ltv, PositionError::InvalidLTV);
+        require!(MAX_LTV <= ltv, PositionError::InvalidLTV);
 
         let collateral_transfer_cpi_accounts = Transfer {
             from: self.collateral_vault.to_account_info(),

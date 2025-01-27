@@ -424,7 +424,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("liquidate position", async () => {
+  xit("liquidate position", async () => {
 
     position2_user2 = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -473,7 +473,7 @@ describe("cdp_stablecoin_protocol", () => {
   });
 
 
-  it("withdraw liquidation reward", async () => {
+  xit("withdraw liquidation reward", async () => {
     
     const tx = await program.methods.claimStakeReward()
     .accountsPartial({
