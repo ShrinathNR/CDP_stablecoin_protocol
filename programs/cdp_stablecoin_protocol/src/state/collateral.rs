@@ -32,6 +32,9 @@ impl CollateralConfig {
         token_program: &Program<'info, Token>,
         auth_bump: u8,
     ) -> Result<()> {
+        if self.total_debt == 0 {
+            return Ok(());
+        }
         let pending_reward = (self.total_debt)
             .checked_mul(
                 protocol_config.cumulative_reward_per_debt
