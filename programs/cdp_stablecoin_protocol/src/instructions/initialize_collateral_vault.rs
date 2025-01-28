@@ -16,13 +16,13 @@ pub struct InitializeCollateralVault<'info> {
         seeds = [b"collateral", collateral_mint.key().as_ref()],
         bump
     )]
-    collateral_vault_config: Account<'info, CollateralConfig>,
+    collateral_vault_config: Box<Account<'info, CollateralConfig>>,
 
     #[account(
         seeds = [b"config"],
         bump = protocol_config.bump
     )]
-    protocol_config: Account<'info, ProtocolConfig>,
+    protocol_config: Box<Account<'info, ProtocolConfig>>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         seeds = [b"auth"],
@@ -37,7 +37,7 @@ pub struct InitializeCollateralVault<'info> {
         token::authority = auth,
         bump
     )]
-    collateral_vault: Account<'info, TokenAccount>,
+    collateral_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         init,
         payer = admin,
@@ -46,7 +46,7 @@ pub struct InitializeCollateralVault<'info> {
         token::authority = auth,
         bump
     )]
-    liquidation_rewards_vault: Account<'info, TokenAccount>,
+    liquidation_rewards_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         address = protocol_config.stable_mint,
