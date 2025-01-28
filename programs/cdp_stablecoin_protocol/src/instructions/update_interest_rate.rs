@@ -4,12 +4,18 @@ use crate::{
     state::ProtocolConfig,
 };
 use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token::{Mint, Token, TokenAccount},
+};
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 #[derive(Accounts)]
 pub struct UpdateInterestRate<'info> {
     #[account(mut)]
     user: Signer<'info>,
+    collateral_mint: Account<'info, Mint>,
+
     #[account(
         mut,
         seeds = [b"config"],
@@ -18,7 +24,40 @@ pub struct UpdateInterestRate<'info> {
     pub protocol_config: Account<'info, ProtocolConfig>,
 
     #[account(owner = pyth_solana_receiver_sdk::ID)]
-    pub price_feed: Account<'info, PriceUpdateV2>,
+    pub stablecoin_price_feed: Account<'info, PriceUpdateV2>,
+    #[account(
+        mut,
+        address = protocol_config.stable_mint,
+        mint::decimals = 6,
+        mint::authority = auth,
+    )]
+    stable_mint: Account<'info, Mint>,
+    #[account(
+        mut,
+        seeds = [b"treasury", stable_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    pub treasury_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    pub stake_vault: Box<Account<'info, TokenAccount>>,
+    /// CHECK: This is an auth acc for the vault
+    #[account(
+        mut,
+        seeds = [b"auth"],
+        bump = protocol_config.auth_bump
+    )]
+    auth: UncheckedAccount<'info>,
+    token_program: Program<'info, Token>,
+    associated_token_program: Program<'info, AssociatedToken>,
+    system_program: Program<'info, System>,
 }
 
 impl<'info> UpdateInterestRate<'info> {
@@ -153,7 +192,7 @@ impl<'info> UpdateInterestRate<'info> {
         // Calculate time elapsed
         let current_timestamp = Clock::get()?.unix_timestamp;
         let time_elapsed =
-            (current_timestamp - self.protocol_config.last_interest_rate_update) as u64;
+            (current_timestamp - self.protocol_config.last_interest_rate_update_time) as u64;
 
         match time_elapsed {
             0 => return Ok(()),
@@ -161,7 +200,7 @@ impl<'info> UpdateInterestRate<'info> {
         };
 
         // Get current stablecoin price
-        let price_feed = &self.price_feed;
+        let price_feed = &self.stablecoin_price_feed;
 
         let feed_id: [u8; 32] = get_feed_id_from_hex(&self.protocol_config.stablecoin_price_feed)?;
 
@@ -175,28 +214,44 @@ impl<'info> UpdateInterestRate<'info> {
             self.protocol_config.base_rate,
             self.protocol_config.sigma,
         )?;
+        self.protocol_config.last_interest_rate = new_interest_rate_yearly;
 
         // Calculate compound interest
         let per_second_rate = new_interest_rate_yearly / YEAR_IN_SECONDS as u128;
 
         let compounded_interest_rate =
             Self::compound_interest(per_second_rate, time_elapsed as u128)?;
+        
+        // Calculate interest revenue
+        let old_total_debt = self.protocol_config.total_debt as u128;
+        let new_total_debt = old_total_debt
+            .checked_mul(compounded_interest_rate)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            / INTEREST_SCALE;
+        let interest_revenue = new_total_debt
+            .checked_sub(old_total_debt)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
+        
+        // Distribute revenue
+        self.protocol_config.distribute_revenue(
+            interest_revenue,
+            &self.stable_mint,
+            &self.treasury_vault,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+        )?;
 
         // Update protocol state
-
         self.protocol_config.cumulative_interest_rate =
             (self.protocol_config.cumulative_interest_rate)
                 .checked_mul(compounded_interest_rate)
                 .ok_or(ArithmeticError::ArithmeticOverflow)?
                 / INTEREST_SCALE;
 
-        self.protocol_config.total_debt = (self.protocol_config.total_debt as u128)
-            .checked_mul(compounded_interest_rate)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?
-            / INTEREST_SCALE;
-
-        self.protocol_config.last_interest_rate_update = current_timestamp;
-
+        self.protocol_config.total_debt = new_total_debt;
+        self.protocol_config.last_interest_rate_update_time  = current_timestamp;
+        
         Ok(())
     }
 }
