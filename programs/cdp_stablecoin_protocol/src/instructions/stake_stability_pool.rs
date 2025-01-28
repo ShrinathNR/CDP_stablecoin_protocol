@@ -66,7 +66,7 @@ impl<'info> Stake<'info> {
         self.stake_account.set_inner(StakeAccount {
             user: self.user.key(),
             amount: 0,
-            init_deposit_depletion_factor: self.protocol_config.deposit_depletion_factor,
+            init_deposit_depletion_factor: self.collateral_vault_config.deposit_depletion_factor,
             init_gain_summation: self.collateral_vault_config.gain_summation,
             last_staked: Clock::get()?.unix_timestamp,
             bump: bumps.stake_account,
@@ -75,6 +75,15 @@ impl<'info> Stake<'info> {
         Ok(())
     }
     pub fn deposit_tokens(&mut self, amount: u64) -> Result<()> {
+        self.collateral_vault_config.claim_pending_rewards(
+            &self.protocol_config,
+            &self.stable_mint,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+            self.protocol_config.auth_bump,
+        )?;
+        
         // Transfer tokens
         let cpi_program = self.token_program.to_account_info();
 
@@ -96,7 +105,7 @@ impl<'info> Stake<'info> {
         // Update staked amount
         self.stake_account.amount += amount;
 
-        self.protocol_config.total_stake_amount += amount as u128;
+        self.collateral_vault_config.total_stake_amount += amount as u128;
 
         Ok(())
     }

@@ -3,7 +3,7 @@ use anchor_spl::{
     token::{Mint, Token, TokenAccount},
     associated_token::AssociatedToken,
 };
-use crate::{constants::BPS_SCALE, state::ProtocolConfig};
+use crate::state::ProtocolConfig;
 
 #[derive(Accounts)]
 pub struct InitializeProtocolConfig<'info> {
@@ -16,7 +16,7 @@ pub struct InitializeProtocolConfig<'info> {
         seeds = [b"config"],
         bump
     )]
-    protocol_config: Account<'info, ProtocolConfig>,
+    protocol_config: Box<Account<'info, ProtocolConfig>>,
     #[account(
         init,
         payer = admin,
@@ -42,7 +42,7 @@ pub struct InitializeProtocolConfig<'info> {
         token::authority = auth,
         bump
     )]
-    treasury_vault: Account<'info, TokenAccount>,
+    treasury_vault: Box<Account<'info, TokenAccount>>,
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
     system_program: Program<'info, System>,
@@ -74,10 +74,10 @@ impl<'info> InitializeProtocolConfig<'info> {
             stablecoin_price_feed,
             last_interest_rate_update_time: Clock::get()?.unix_timestamp,
             last_interest_rate: 0,
-            deposit_depletion_factor: BPS_SCALE,
             total_debt: 0,
-            total_stake_amount: 0,
             revenue_share_to_stability_pool,
+            cumulative_reward_per_debt: 0,
+            pending_treasury_rewards: 0,
         });
 
         Ok(())

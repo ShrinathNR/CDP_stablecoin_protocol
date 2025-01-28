@@ -40,14 +40,6 @@ pub struct OpenPosition<'info> {
     auth: UncheckedAccount<'info>,
     #[account(
         mut,
-        seeds = [b"treasury", stable_mint.key().as_ref()],
-        token::mint = stable_mint,
-        token::authority = auth,
-        bump
-    )]
-    treasury_vault: Box<Account<'info, TokenAccount>>,
-    #[account(
-        mut,
         seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_mint.key().as_ref()],
         token::mint = stable_mint,
         token::authority = auth,
@@ -99,6 +91,20 @@ pub struct OpenPosition<'info> {
 
 impl<'info> OpenPosition<'info> {
     pub fn open_position(&mut self, collateral_amount: u64, mint_amount: u64) -> Result<()> {
+        
+        // claim any pending rewards for this collateral type
+        self.collateral_vault_config.claim_pending_rewards(
+            &self.protocol_config,
+            &self.stable_mint,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+            self.protocol_config.auth_bump,
+        )?;
+
+        // Before updating totals
+        self.collateral_vault_config.compound_total_debt(&self.protocol_config)?;
+        
         let price_feed = &self.price_feed;
 
         // let maximum_age: u64 = 30;
@@ -117,15 +123,7 @@ impl<'info> OpenPosition<'info> {
                     / 365) as u64,
             )
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
-        // Distribute upfront fees
-        self.protocol_config.distribute_revenue(
-            upfront_cost,
-            &self.stable_mint,
-            &self.treasury_vault,
-            &self.stake_vault,
-            &self.auth,
-            &self.token_program,
-        )?;
+
         let debt_amount = mint_amount
             .checked_add(upfront_cost)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
@@ -176,6 +174,11 @@ impl<'info> OpenPosition<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         self.protocol_config.update_totals(debt_amount as i64)?;
+        // register upfront fees
+        self.protocol_config.accumulate_reward(upfront_cost)?;
+        self.collateral_vault_config.total_debt = self.collateral_vault_config.total_debt
+            .checked_add(debt_amount as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         let accounts = MintTo {
             mint: self.stable_mint.to_account_info(),

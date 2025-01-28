@@ -4,17 +4,12 @@ use crate::{
     state::ProtocolConfig,
 };
 use anchor_lang::prelude::*;
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token::{Mint, Token, TokenAccount},
-};
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 #[derive(Accounts)]
 pub struct UpdateInterestRate<'info> {
     #[account(mut)]
     user: Signer<'info>,
-    collateral_mint: Account<'info, Mint>,
 
     #[account(
         mut,
@@ -25,39 +20,6 @@ pub struct UpdateInterestRate<'info> {
 
     #[account(owner = pyth_solana_receiver_sdk::ID)]
     pub stablecoin_price_feed: Account<'info, PriceUpdateV2>,
-    #[account(
-        mut,
-        address = protocol_config.stable_mint,
-        mint::decimals = 6,
-        mint::authority = auth,
-    )]
-    stable_mint: Account<'info, Mint>,
-    #[account(
-        mut,
-        seeds = [b"treasury", stable_mint.key().as_ref()],
-        token::mint = stable_mint,
-        token::authority = auth,
-        bump
-    )]
-    pub treasury_vault: Box<Account<'info, TokenAccount>>,
-    #[account(
-        mut,
-        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_mint.key().as_ref()],
-        token::mint = stable_mint,
-        token::authority = auth,
-        bump
-    )]
-    pub stake_vault: Box<Account<'info, TokenAccount>>,
-    /// CHECK: This is an auth acc for the vault
-    #[account(
-        mut,
-        seeds = [b"auth"],
-        bump = protocol_config.auth_bump
-    )]
-    auth: UncheckedAccount<'info>,
-    token_program: Program<'info, Token>,
-    associated_token_program: Program<'info, AssociatedToken>,
-    system_program: Program<'info, System>,
 }
 
 impl<'info> UpdateInterestRate<'info> {
@@ -232,15 +194,7 @@ impl<'info> UpdateInterestRate<'info> {
             .checked_sub(old_total_debt)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
         
-        // Distribute revenue
-        self.protocol_config.distribute_revenue(
-            interest_revenue,
-            &self.stable_mint,
-            &self.treasury_vault,
-            &self.stake_vault,
-            &self.auth,
-            &self.token_program,
-        )?;
+        self.protocol_config.accumulate_reward(interest_revenue)?;
 
         // Update protocol state
         self.protocol_config.cumulative_interest_rate =

@@ -27,7 +27,14 @@ pub struct ClosePosition<'info> {
     stable_mint: Account<'info, Mint>,
 
     protocol_config: Account<'info, ProtocolConfig>,
-
+    #[account(
+        mut,
+        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    stake_vault: Box<Account<'info, TokenAccount>>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         mut,
@@ -83,9 +90,27 @@ impl<'info> ClosePosition<'info> {
         // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
         // require!(MIN_LTV <= ltv && ltv <= MAX_LTV, PositionError::InvalidLTV);
 
-        let current_debt = self
+        // claim any pending rewards for this collateral type
+        self.collateral_vault_config.claim_pending_rewards(
+            &self.protocol_config,
+            &self.stable_mint,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+            self.protocol_config.auth_bump,
+        )?;
+
+        // Before updating totals
+        self.collateral_vault_config.compound_total_debt(&self.protocol_config)?;
+        
+        let debt_amount = self
             .protocol_config
             .calculate_current_debt(&self.position)?;
+
+        let debt_value: u64 = debt_amount
+            .checked_div(10_u64.pow(self.stable_mint.decimals as u32)) // is thiscorrrect ??
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
 
         let price_feed = &self.price_feed;
         // let maximum_age: u64 = 30;
@@ -99,10 +124,10 @@ impl<'info> ClosePosition<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(10_u128.pow(price.exponent.abs() as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(LAMPORTS_PER_SOL as u128)
+            .checked_div(LAMPORTS_PER_SOL as u128) // ! why ? many types of collateral. might have different exponent
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        let ltv = (current_debt as u128)
+        let ltv = (debt_value as u128) // !! this can get abused if user mints sub 1 usd mint positions and gets rounded down to 0 imo. got to calcualte ltv in one move
             .checked_mul(10000)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(collateral_value as u128)
@@ -142,9 +167,12 @@ impl<'info> ClosePosition<'info> {
 
             let stable_burn_cpi_ctx =
                 CpiContext::new(self.token_program.to_account_info(), accounts);
-            burn(stable_burn_cpi_ctx, current_debt)?; // Use current_debt with accrued interest
+            burn(stable_burn_cpi_ctx, debt_amount)?; // Use current_debt with accrued interest
 
-            self.protocol_config.update_totals(-(current_debt as i64))?;
+            self.protocol_config.update_totals(-(debt_amount as i64))?;
+            self.collateral_vault_config.total_debt = self.collateral_vault_config.total_debt
+                .checked_sub(debt_amount as u128)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?;
         } else {
             return err!(PositionError::InvalidLTV);
         }

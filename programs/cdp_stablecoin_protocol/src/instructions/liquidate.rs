@@ -104,6 +104,15 @@ pub struct LiquidatePosition<'info> {
 
 impl<'info> LiquidatePosition<'info> {
     pub fn liquidate_position(&mut self) -> Result<()> {
+        self.collateral_vault_config.claim_pending_rewards(
+            &self.protocol_config,
+            &self.stable_mint,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+            self.protocol_config.auth_bump,
+        )?;
+        
         let current_debt = self
             .protocol_config
             .calculate_current_debt(&self.position)?;
@@ -165,28 +174,29 @@ impl<'info> LiquidatePosition<'info> {
             .gain_summation
             .checked_add(
                 (self.position.collateral_amount as u128)
-                    .checked_mul(self.protocol_config.deposit_depletion_factor as u128)
+                    .checked_mul(self.collateral_vault_config.deposit_depletion_factor as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
                     .checked_div(BPS_SCALE as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
-                    .checked_div(self.protocol_config.total_stake_amount)
+                    .checked_div(self.collateral_vault_config.total_stake_amount)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?,
             )
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        self.protocol_config.deposit_depletion_factor =
-            (self.protocol_config.deposit_depletion_factor as u128)
+        self.collateral_vault_config.deposit_depletion_factor =
+            self.collateral_vault_config.deposit_depletion_factor
                 .checked_mul(
-                    (self.protocol_config.total_stake_amount)
+                    (self.collateral_vault_config.total_stake_amount)
                         .checked_sub(current_debt as u128)
                         .ok_or(ArithmeticError::ArithmeticOverflow)?,
                 )
                 .ok_or(ArithmeticError::ArithmeticOverflow)?
-                .checked_div(self.protocol_config.total_stake_amount)
-                .ok_or(ArithmeticError::ArithmeticOverflow)? as u16;
-
-        self.protocol_config.total_stake_amount = self
-            .protocol_config
+                .checked_div(self.collateral_vault_config.total_stake_amount)
+                .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        
+        self.collateral_vault_config.compound_total_debt(&self.protocol_config)?;
+        self.collateral_vault_config.total_stake_amount = self
+            .collateral_vault_config
             .total_stake_amount
             .checked_sub(current_debt as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;

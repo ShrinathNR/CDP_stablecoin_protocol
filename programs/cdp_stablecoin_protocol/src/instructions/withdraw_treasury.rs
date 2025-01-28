@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{transfer, Mint, Token, TokenAccount, Transfer},
+    token::{Mint, MintTo, Token, TokenAccount, mint_to},
 };
 
 use crate::{errors::StakeError, state::ProtocolConfig};
@@ -26,14 +26,6 @@ pub struct WithdrawTreasury<'info> {
     )]
     pub stable_mint: Account<'info, Mint>,
     #[account(
-        mut,
-        seeds = [b"treasury", stable_mint.key().as_ref()],
-        token::mint = stable_mint,
-        token::authority = auth,
-        bump
-    )]
-    pub treasury_vault: Box<Account<'info, TokenAccount>>,
-    #[account(
         init_if_needed,
         payer = admin,
         associated_token::mint = stable_mint,
@@ -54,26 +46,30 @@ pub struct WithdrawTreasury<'info> {
 
 impl<'info> WithdrawTreasury<'info> {
     pub fn withdraw_treasury(&mut self) -> Result<()> {
+        let pending_amount = self.protocol_config.pending_treasury_rewards;
+        require!(pending_amount > 0, StakeError::InsufficientFunds);
 
-        let amount = self.treasury_vault.amount;
-        require!(amount > 0, StakeError::InsufficientFunds);
-
-        let accounts = Transfer {
-            from: self.treasury_vault.to_account_info(),
+        // Mint pending rewards
+        let mint_accounts = MintTo {
+            mint: self.stable_mint.to_account_info(),
             to: self.admin_ata.to_account_info(),
             authority: self.auth.to_account_info(),
         };
 
-        let seeds: &[&[u8]; 2] = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
+        let seeds = &[&b"auth"[..], &[self.protocol_config.auth_bump]];
         let signer_seeds = &[&seeds[..]];
 
-        let cpi_ctx = CpiContext::new_with_signer(
-            self.token_program.to_account_info(),
-            accounts,
-            signer_seeds,
-        );
+        mint_to(
+            CpiContext::new_with_signer(
+                self.token_program.to_account_info(),
+                mint_accounts,
+                signer_seeds,
+            ),
+            pending_amount
+        )?;
 
-        transfer(cpi_ctx, amount)?;
+        // Reset pending rewards
+        self.protocol_config.pending_treasury_rewards = 0;
 
         Ok(())
     }

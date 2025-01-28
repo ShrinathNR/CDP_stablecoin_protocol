@@ -55,6 +55,16 @@ pub struct UnStake<'info> {
 
 impl<'info> UnStake<'info> {
     pub fn withdraw_tokens(&mut self, bumps: &UnStakeBumps) -> Result<()> {
+
+        self.collateral_vault_config.claim_pending_rewards(
+            &self.protocol_config,
+            &self.stable_mint,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+            self.protocol_config.auth_bump,
+        )?;
+        
         // Transfer tokens
         let cpi_program = self.token_program.to_account_info();
 
