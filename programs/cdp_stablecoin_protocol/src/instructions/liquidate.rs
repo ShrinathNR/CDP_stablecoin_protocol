@@ -6,7 +6,7 @@ use anchor_spl::{
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
-    constants::{BPS_SCALE, MAX_LTV},
+    constants::{INTEREST_SCALE, MAX_LTV},
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position, ProtocolConfig},
 };
@@ -176,7 +176,7 @@ impl<'info> LiquidatePosition<'info> {
                 (self.position.collateral_amount as u128)
                     .checked_mul(self.collateral_vault_config.deposit_depletion_factor as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
-                    .checked_div(BPS_SCALE as u128)
+                    .checked_div(INTEREST_SCALE)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
                     .checked_div(self.collateral_vault_config.total_stake_amount)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?,

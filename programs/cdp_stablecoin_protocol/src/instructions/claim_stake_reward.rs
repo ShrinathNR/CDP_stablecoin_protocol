@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::BPS_SCALE,
+    constants::INTEREST_SCALE,
     errors::ArithmeticError,
     state::{CollateralConfig, ProtocolConfig, StakeAccount},
 };
@@ -89,7 +89,7 @@ impl<'info> ClaimStakeRewards<'info> {
                     .ok_or(ArithmeticError::ArithmeticOverflow)?,
             )
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_mul(BPS_SCALE as u128)
+            .checked_mul(INTEREST_SCALE)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(self.stake_account.init_deposit_depletion_factor as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;

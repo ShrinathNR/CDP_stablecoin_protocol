@@ -32,7 +32,7 @@ impl CollateralConfig {
         token_program: &Program<'info, Token>,
         auth_bump: u8,
     ) -> Result<()> {
-        if self.total_debt == 0 {
+        if self.total_debt == 0 || self.total_stake_amount == 0 { // not sure if i should delete total debt here. i think i should but leaving for now
             return Ok(());
         }
         let pending_reward = (self.total_debt)
