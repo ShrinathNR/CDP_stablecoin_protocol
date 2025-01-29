@@ -24,13 +24,13 @@ pub struct OpenPosition<'info> {
         mint::decimals = 6,
         mint::authority = auth,
     )]
-    stable_mint: Account<'info, Mint>,
+    stable_mint: Box<Account<'info, Mint>>,
     #[account(
         mut,
         seeds = [b"config"],
         bump = protocol_config.bump
     )]
-    protocol_config: Account<'info, ProtocolConfig>,
+    protocol_config: Box<Account<'info, ProtocolConfig>>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         mut,
@@ -65,7 +65,7 @@ pub struct OpenPosition<'info> {
         constraint = collateral_vault_config.mint == collateral_mint.key(),
         bump = collateral_vault_config.bump
     )]
-    collateral_vault_config: Account<'info, CollateralConfig>,
+    collateral_vault_config: Box<Account<'info, CollateralConfig>>,
     #[account(
         init,
         payer = user,
