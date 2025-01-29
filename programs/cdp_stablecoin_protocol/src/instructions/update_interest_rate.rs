@@ -10,6 +10,7 @@ use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2
 pub struct UpdateInterestRate<'info> {
     #[account(mut)]
     user: Signer<'info>,
+
     #[account(
         mut,
         seeds = [b"config"],
@@ -18,7 +19,7 @@ pub struct UpdateInterestRate<'info> {
     pub protocol_config: Account<'info, ProtocolConfig>,
 
     #[account(owner = pyth_solana_receiver_sdk::ID)]
-    pub price_feed: Account<'info, PriceUpdateV2>,
+    pub stablecoin_price_feed: Account<'info, PriceUpdateV2>,
 }
 
 impl<'info> UpdateInterestRate<'info> {
@@ -118,10 +119,12 @@ impl<'info> UpdateInterestRate<'info> {
                 )
             }
             3 => {
-                return Ok((INTEREST_SCALE + interest_rate)
+                return Ok(
+                    (INTEREST_SCALE + interest_rate)
                     * (INTEREST_SCALE + interest_rate)
+                    / INTEREST_SCALE
                     * (INTEREST_SCALE + interest_rate)
-                    / (INTEREST_SCALE * INTEREST_SCALE))
+                    / INTEREST_SCALE)
             }
             4 => {
                 let pow_two = (INTEREST_SCALE + interest_rate) * (INTEREST_SCALE + interest_rate)
@@ -153,7 +156,7 @@ impl<'info> UpdateInterestRate<'info> {
         // Calculate time elapsed
         let current_timestamp = Clock::get()?.unix_timestamp;
         let time_elapsed =
-            (current_timestamp - self.protocol_config.last_interest_rate_update) as u64;
+            (current_timestamp - self.protocol_config.last_interest_rate_update_time) as u64;
 
         match time_elapsed {
             0 => return Ok(()),
@@ -161,7 +164,7 @@ impl<'info> UpdateInterestRate<'info> {
         };
 
         // Get current stablecoin price
-        let price_feed = &self.price_feed;
+        let price_feed = &self.stablecoin_price_feed;
 
         let feed_id: [u8; 32] = get_feed_id_from_hex(&self.protocol_config.stablecoin_price_feed)?;
 
@@ -175,28 +178,36 @@ impl<'info> UpdateInterestRate<'info> {
             self.protocol_config.base_rate,
             self.protocol_config.sigma,
         )?;
+        self.protocol_config.last_interest_rate = new_interest_rate_yearly;
 
         // Calculate compound interest
         let per_second_rate = new_interest_rate_yearly / YEAR_IN_SECONDS as u128;
 
         let compounded_interest_rate =
             Self::compound_interest(per_second_rate, time_elapsed as u128)?;
+        
+        // Calculate interest revenue
+        let old_total_debt = self.protocol_config.total_debt as u128;
+        let new_total_debt = old_total_debt
+            .checked_mul(compounded_interest_rate)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            / INTEREST_SCALE;
+        let interest_revenue = new_total_debt
+            .checked_sub(old_total_debt)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
+        
+        self.protocol_config.accumulate_reward(interest_revenue)?;
 
         // Update protocol state
-
         self.protocol_config.cumulative_interest_rate =
             (self.protocol_config.cumulative_interest_rate)
                 .checked_mul(compounded_interest_rate)
                 .ok_or(ArithmeticError::ArithmeticOverflow)?
                 / INTEREST_SCALE;
 
-        self.protocol_config.total_debt = (self.protocol_config.total_debt as u128)
-            .checked_mul(compounded_interest_rate)
-            .ok_or(ArithmeticError::ArithmeticOverflow)?
-            / INTEREST_SCALE;
-
-        self.protocol_config.last_interest_rate_update = current_timestamp;
-
+        self.protocol_config.total_debt = new_total_debt;
+        self.protocol_config.last_interest_rate_update_time  = current_timestamp;
+        
         Ok(())
     }
 }

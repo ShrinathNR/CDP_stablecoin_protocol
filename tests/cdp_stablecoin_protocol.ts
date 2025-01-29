@@ -4,6 +4,8 @@ import { CdpStablecoinProtocol } from "../target/types/cdp_stablecoin_protocol";
 import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import { Keypair,SystemProgram, Commitment, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, Account, TOKEN_PROGRAM_ID, createMint, getAssociatedTokenAddressSync, getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+
+const revenueShareToStabilityPool = 8000;
 const protocolFee = 500;
 const redemptionFee = 500;
 const mintFee = 500;
@@ -44,6 +46,7 @@ describe("cdp_stablecoin_protocol", () => {
   let position2: PublicKey;
   let position2_user2: PublicKey;
   let stakeVault1: PublicKey;
+  let stakeVault2: PublicKey;
   let stakeAccount1_user1: PublicKey;
 
   let wallet2 = Keypair.generate();
@@ -168,6 +171,15 @@ describe("cdp_stablecoin_protocol", () => {
       program.programId
     )[0];
 
+    stakeVault2 = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stake_vault"),
+        stableMint.toBuffer(),
+        collateralMint2.toBuffer()
+      ],
+      program.programId
+    )[0];
+
     stakeAccount1_user1 = anchor.web3.PublicKey.findProgramAddressSync(
       [
         Buffer.from("stake"),
@@ -189,7 +201,8 @@ describe("cdp_stablecoin_protocol", () => {
       mintFee,
       baseRate,
       sigma,
-      stablecoinPriceFeed
+      stablecoinPriceFeed,
+      revenueShareToStabilityPool
     )
     .accountsPartial({
       admin: wallet.publicKey,
@@ -240,6 +253,8 @@ describe("cdp_stablecoin_protocol", () => {
       auth,
       collateralVault: collateralVault2,
       liquidationRewardsVault: liquidationRewardsVault2,
+      stakeVault: stakeVault2,
+      stableMint,
     })
     .signers([wallet.payer])
     .rpc()
@@ -386,6 +401,13 @@ describe("cdp_stablecoin_protocol", () => {
 
     const stakeAmount = new BN(3);
     
+    const userStableBalance = await connection.getTokenAccountBalance(user1StableAta);
+    console.log("User's stable token balance before staking:", {
+      rawAmount: userStableBalance.value.amount,
+      uiAmount: userStableBalance.value.uiAmount,
+      decimals: userStableBalance.value.decimals
+    });
+    
     const tx = await program.methods.stakeStableTokens(
       stakeAmount
     )
@@ -422,6 +444,13 @@ describe("cdp_stablecoin_protocol", () => {
     .rpc({skipPreflight:true})
     .then(confirm);
     console.log("Your transaction signature", tx);
+
+    const userStableBalance = await connection.getTokenAccountBalance(user1StableAta);
+    console.log("User's stable token balance after unstaking:", {
+      rawAmount: userStableBalance.value.amount,
+      uiAmount: userStableBalance.value.uiAmount,
+      decimals: userStableBalance.value.decimals
+    });
   });
 
   xit("liquidate position", async () => {
@@ -459,12 +488,14 @@ describe("cdp_stablecoin_protocol", () => {
   });
 
   it("update interest", async () => {
-    
+    // Wait 5 seconds before updating interest rate to get the higher elapsed time section of the code
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
     const tx = await program.methods.updateInterestRate()
     .accountsPartial({
       user: wallet.publicKey,
       protocolConfig,
-      priceFeed: USDC_PYTH_ACCOUNT,
+      stablecoinPriceFeed: USDC_PYTH_ACCOUNT,
     })
     .signers([wallet.payer, ])
     .rpc({skipPreflight:true})
@@ -490,6 +521,101 @@ describe("cdp_stablecoin_protocol", () => {
     .rpc({skipPreflight:true})
     .then(confirm);
     console.log("Your transaction signature", tx);
+  });
+
+  xit("Verify upfront cost mechanism", async () => {
+    // Get initial balances
+    const initialUserStableBalance = await connection.getTokenAccountBalance(user1StableAta);
+    const initialStakeVaultBalance = await connection.getTokenAccountBalance(stakeVault1);
+    
+    console.log("Initial balances:", {
+      userStable: initialUserStableBalance.value,
+      stakeVault: initialStakeVaultBalance.value
+    });
+
+    // Open position
+    const testCollateralAmount = new BN(0.1 * LAMPORTS_PER_SOL);
+    const testDebtAmount = new BN(50000);
+    
+    const testPosition = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("position"),
+        wallet.publicKey.toBuffer(),
+        collateralMint1.toBuffer()
+      ],
+      program.programId
+    )[0];
+    
+    const openTx = await program.methods.openPosition(
+      testCollateralAmount,
+      testDebtAmount
+    )
+    .accountsPartial({
+      user: wallet.publicKey,
+      collateralMint: collateralMint1,
+      stableMint: stableMint,
+      protocolConfig,
+      auth,
+      userAta: collateralAccount1_user1.address,
+      userStableAta: user1StableAta,
+      collateralVaultConfig: collateralVaultConfig1,
+      position: testPosition,
+      priceFeed: JITO_SOL_PYTH_ACCOUNT,
+      collateralVault: collateralVault1,
+      stakeVault: stakeVault1,
+    })
+    .signers([wallet.payer])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+    
+    // Get balances after opening position
+    const afterOpenUserBalance = await connection.getTokenAccountBalance(user1StableAta);
+    const afterOpenStakeVaultBalance = await connection.getTokenAccountBalance(stakeVault1);
+    
+    console.log("After opening position:", {
+      userStable: afterOpenUserBalance.value,
+      stakeVault: afterOpenStakeVaultBalance.value,
+      mintedAmount: testDebtAmount.toString(),
+      upfrontCost: afterOpenStakeVaultBalance.value.amount
+    });
+
+    // Close position
+    const closeTx = await program.methods.closePosition()
+    .accountsPartial({
+      user: wallet.publicKey,
+      collateralMint: collateralMint1,
+      stableMint: stableMint,
+      protocolConfig,
+      auth,
+      userAta: collateralAccount1_user1.address,
+      userStableAta: user1StableAta,
+      collateralVaultConfig: collateralVaultConfig1,
+      position: testPosition,
+      priceFeed: JITO_SOL_PYTH_ACCOUNT,
+      collateralVault: collateralVault1,
+    })
+    .signers([wallet.payer])
+    .rpc({skipPreflight:true})
+    .then(confirm);
+
+    // Get final balances
+    const finalUserBalance = await connection.getTokenAccountBalance(user1StableAta);
+    const finalStakeVaultBalance = await connection.getTokenAccountBalance(stakeVault1);
+    
+    console.log("Final balances:", {
+      userStable: finalUserBalance.value,
+      stakeVault: finalStakeVaultBalance.value
+    });
+
+    // Calculate and display differences
+    const userBalanceDiff = Number(afterOpenUserBalance.value.amount) - Number(initialUserStableBalance.value.amount);
+    const stakeVaultDiff = Number(afterOpenStakeVaultBalance.value.amount) - Number(initialStakeVaultBalance.value.amount);
+    
+    console.log("Balance changes:", {
+      userStableChange: userBalanceDiff,
+      stakeVaultChange: stakeVaultDiff,
+      upfrontCostPercentage: (stakeVaultDiff / Number(testDebtAmount) * 100).toFixed(2) + "%"
+    });
   });
 
 });

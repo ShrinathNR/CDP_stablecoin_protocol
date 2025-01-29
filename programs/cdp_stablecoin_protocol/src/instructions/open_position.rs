@@ -1,4 +1,4 @@
-use anchor_lang::{prelude::*, solana_program::native_token::LAMPORTS_PER_SOL};
+use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{mint_to, transfer, Mint, MintTo, Token, TokenAccount, Transfer},
@@ -6,7 +6,7 @@ use anchor_spl::{
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
-    constants::MAX_LTV,
+    constants::{INTEREST_SCALE, MAX_LTV, UPFRONT_COST_INTEREST_PERIOD},
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position, ProtocolConfig},
 };
@@ -24,13 +24,13 @@ pub struct OpenPosition<'info> {
         mint::decimals = 6,
         mint::authority = auth,
     )]
-    stable_mint: Account<'info, Mint>,
+    stable_mint: Box<Account<'info, Mint>>,
     #[account(
         mut,
         seeds = [b"config"],
         bump = protocol_config.bump
     )]
-    protocol_config: Account<'info, ProtocolConfig>,
+    protocol_config: Box<Account<'info, ProtocolConfig>>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         mut,
@@ -38,6 +38,14 @@ pub struct OpenPosition<'info> {
         bump = protocol_config.auth_bump
     )]
     auth: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        seeds = [b"stake_vault", stable_mint.key().as_ref(), collateral_mint.key().as_ref()],
+        token::mint = stable_mint,
+        token::authority = auth,
+        bump
+    )]
+    stake_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = collateral_mint,
@@ -57,7 +65,7 @@ pub struct OpenPosition<'info> {
         constraint = collateral_vault_config.mint == collateral_mint.key(),
         bump = collateral_vault_config.bump
     )]
-    collateral_vault_config: Account<'info, CollateralConfig>,
+    collateral_vault_config: Box<Account<'info, CollateralConfig>>,
     #[account(
         init,
         payer = user,
@@ -82,7 +90,21 @@ pub struct OpenPosition<'info> {
 }
 
 impl<'info> OpenPosition<'info> {
-    pub fn open_position(&mut self, collateral_amount: u64, debt_amount: u64) -> Result<()> {
+    pub fn open_position(&mut self, collateral_amount: u64, mint_amount: u64) -> Result<()> {
+        
+        // claim any pending rewards for this collateral type
+        self.collateral_vault_config.claim_pending_rewards(
+            &self.protocol_config,
+            &self.stable_mint,
+            &self.stake_vault,
+            &self.auth,
+            &self.token_program,
+            self.protocol_config.auth_bump,
+        )?;
+
+        // Before updating totals
+        self.collateral_vault_config.compound_total_debt(&self.protocol_config)?;
+        
         let price_feed = &self.price_feed;
 
         // let maximum_age: u64 = 30;
@@ -93,15 +115,33 @@ impl<'info> OpenPosition<'info> {
         // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
         let price = price_feed.get_price_unchecked(&feed_id)?;
 
+        let upfront_cost = (mint_amount as u128)
+            .checked_mul(
+                self.protocol_config.last_interest_rate
+                    .checked_mul(UPFRONT_COST_INTEREST_PERIOD as u128)
+                    .ok_or(ArithmeticError::ArithmeticOverflow)?
+                    / 365,
+            )
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(INTEREST_SCALE)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
+
+        let debt_amount = mint_amount
+            .checked_add(upfront_cost)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+        let debt_value: u64 = debt_amount
+            .checked_div(10_u64.pow(self.stable_mint.decimals as u32)) // is thiscorrrect ??
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
         let collateral_value = (price.price as u128)
             .checked_mul(collateral_amount as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(10_u128.pow(price.exponent.abs() as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(LAMPORTS_PER_SOL as u128)
+            .checked_div(10_u128.pow(self.collateral_mint.decimals as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        let ltv = (debt_amount as u128)
+        let ltv = (debt_value as u128) // !! this can get abused if user mints sub 1 usd mint positions and gets rounded down to 0 imo. got to calcualte ltv in one move
             .checked_mul(10000)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(collateral_value as u128)
@@ -137,6 +177,11 @@ impl<'info> OpenPosition<'info> {
 
         self.protocol_config.update_totals(debt_amount as i64)?;
 
+        
+        self.collateral_vault_config.total_debt = self.collateral_vault_config.total_debt
+            .checked_add(debt_amount as u128)
+            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+
         let accounts = MintTo {
             mint: self.stable_mint.to_account_info(),
             to: self.user_stable_ata.to_account_info(),
@@ -153,7 +198,37 @@ impl<'info> OpenPosition<'info> {
             signer_seeds,
         );
 
-        mint_to(stable_mint_cpi_ctx, debt_amount)?;
+        mint_to(stable_mint_cpi_ctx, mint_amount)?;
+
+        // register upfront fees
+        // self.protocol_config.accumulate_reward(upfront_cost)?;
+        // Transfer upfront cost to stake vault and update depletion factor
+        if upfront_cost > 0 {
+            let mint_accounts = MintTo {
+                mint: self.stable_mint.to_account_info(),
+                to: self.stake_vault.to_account_info(),
+                authority: self.auth.to_account_info(),
+            };
+
+            mint_to(
+                CpiContext::new_with_signer(
+                    self.token_program.to_account_info(),
+                    mint_accounts,
+                    &[&[b"auth", &[self.protocol_config.auth_bump]]]
+                ),
+                upfront_cost
+            )?;
+
+            // Update depletion factor for this specific vault
+            self.collateral_vault_config.deposit_depletion_factor = self.collateral_vault_config.deposit_depletion_factor
+                .checked_add(
+                    self.collateral_vault_config.deposit_depletion_factor
+                        .checked_mul(upfront_cost as u128)
+                        .ok_or(ArithmeticError::ArithmeticOverflow)?
+                        .checked_div(self.collateral_vault_config.total_debt)
+                        .ok_or(ArithmeticError::ArithmeticOverflow)?
+                ).ok_or(ArithmeticError::ArithmeticOverflow)?;
+        }
 
         Ok(())
     }

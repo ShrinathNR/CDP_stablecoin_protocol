@@ -10,3 +10,5 @@ pub const BPS_SCALE: u16 = 10_000; // Basis points (100% = 10000)
 pub const INTEREST_SCALE: u128 = 1_000_000_000_000_000_000; // 1e18 for interest
 pub const MIN_INTEREST_RATE: u128 = INTEREST_SCALE / 100; // 1% APR
 pub const MAX_INTEREST_RATE: u128 = INTEREST_SCALE * 30 / 100; // 30% APR
+
+pub const UPFRONT_COST_INTEREST_PERIOD: u16 = 7; // paying 7 days worth of interest upfront

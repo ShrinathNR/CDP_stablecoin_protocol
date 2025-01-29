@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::state::{CollateralConfig, ProtocolConfig};
+use crate::{constants::INTEREST_SCALE, state::{CollateralConfig, ProtocolConfig}};
 
 #[derive(Accounts)]
 pub struct InitializeCollateralVault<'info> {
@@ -16,13 +16,13 @@ pub struct InitializeCollateralVault<'info> {
         seeds = [b"collateral", collateral_mint.key().as_ref()],
         bump
     )]
-    collateral_vault_config: Account<'info, CollateralConfig>,
+    collateral_vault_config: Box<Account<'info, CollateralConfig>>,
 
     #[account(
         seeds = [b"config"],
         bump = protocol_config.bump
     )]
-    protocol_config: Account<'info, ProtocolConfig>,
+    protocol_config: Box<Account<'info, ProtocolConfig>>,
     /// CHECK: This is an auth acc for the vault
     #[account(
         seeds = [b"auth"],
@@ -37,7 +37,7 @@ pub struct InitializeCollateralVault<'info> {
         token::authority = auth,
         bump
     )]
-    collateral_vault: Account<'info, TokenAccount>,
+    collateral_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         init,
         payer = admin,
@@ -46,7 +46,7 @@ pub struct InitializeCollateralVault<'info> {
         token::authority = auth,
         bump
     )]
-    liquidation_rewards_vault: Account<'info, TokenAccount>,
+    liquidation_rewards_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         address = protocol_config.stable_mint,
@@ -80,8 +80,13 @@ impl<'info> InitializeCollateralVault<'info> {
             collateral_amount: 0,
             stability_pool_rewards_amount: 0,
             gain_summation: 0,
+            deposit_depletion_factor: INTEREST_SCALE,
+            total_stake_amount: 0,
             bump: bumps.collateral_vault_config,
             vault_bump: bumps.collateral_vault,
+            total_debt: 0,
+            last_reward_per_debt: 0,
+            last_compound_cumulative_rate: ProtocolConfig::INITIAL_CUMULATIVE_RATE,
         });
 
         Ok(())
