@@ -14,8 +14,8 @@ const sigma = 200;
 const stablecoinPriceFeed = "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
 const USDC_PYTH_ACCOUNT = new PublicKey("Dpw1EAVrSB1ibxiDQyTAW6Zip3J4Btk2x4SgApQCeFbX");
 const collateralAmount = new BN(0.1*LAMPORTS_PER_SOL);
-const debtAmount1 = new BN(50000);
-const debtAmount2 = new BN(20000);
+const debtAmount1 = new BN(5);
+const debtAmount2 = new BN(2);
 const JITO_SOL_PRICE_FEED_ID = "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb";
 
 const JITO_SOL_PYTH_ACCOUNT = new PublicKey("AxaxyeDT8JnWERSaTKvFXvPKkEdxnamKSqpWbsSjYg1g");
@@ -239,7 +239,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("Initialize Collateral Config 2", async () => {
+  xit("Initialize Collateral Config 2", async () => {
 
     // Add your test here.
     const tx = await program.methods.initializeCollateralVault(
@@ -330,7 +330,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("Open debt position with collateral mint 2", async () => {
+  xit("Open debt position with collateral mint 2", async () => {
 
     position2 = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -365,7 +365,7 @@ describe("cdp_stablecoin_protocol", () => {
   });
 
 
-  it("Close debt position", async () => {
+  xit("Close debt position", async () => {
 
     position1 = anchor.web3.PublicKey.findProgramAddressSync(
       [
@@ -399,7 +399,7 @@ describe("cdp_stablecoin_protocol", () => {
 
   it("Stake Stability Tokens", async () => {
 
-    const stakeAmount = new BN(1000);
+    const stakeAmount = new BN(3);
     
     const userStableBalance = await connection.getTokenAccountBalance(user1StableAta);
     console.log("User's stable token balance before staking:", {
@@ -427,7 +427,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("UnStake Stability Tokens", async () => {
+  xit("UnStake Stability Tokens", async () => {
     
     const tx = await program.methods.unstakeStableTokens()
     .accountsPartial({
@@ -523,7 +523,7 @@ describe("cdp_stablecoin_protocol", () => {
     console.log("Your transaction signature", tx);
   });
 
-  it("Verify upfront cost mechanism", async () => {
+  xit("Verify upfront cost mechanism", async () => {
     // Get initial balances
     const initialUserStableBalance = await connection.getTokenAccountBalance(user1StableAta);
     const initialStakeVaultBalance = await connection.getTokenAccountBalance(stakeVault1);

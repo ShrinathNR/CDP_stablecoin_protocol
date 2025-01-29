@@ -44,6 +44,7 @@ pub struct Stake<'info> {
     )]
     stake_vault: Account<'info, TokenAccount>,
     #[account(
+        mut,
         seeds = [b"collateral", collateral_vault_config.mint.key().as_ref()],
         bump = collateral_vault_config.bump
     )]

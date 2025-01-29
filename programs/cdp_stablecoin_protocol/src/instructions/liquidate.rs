@@ -112,7 +112,7 @@ impl<'info> LiquidatePosition<'info> {
             &self.token_program,
             self.protocol_config.auth_bump,
         )?;
-        
+
         let current_debt = self
             .protocol_config
             .calculate_current_debt(&self.position)?;
