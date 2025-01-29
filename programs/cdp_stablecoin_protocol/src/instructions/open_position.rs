@@ -6,7 +6,7 @@ use anchor_spl::{
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::{
-    constants::{MAX_LTV, UPFRONT_COST_INTEREST_PERIOD},
+    constants::{INTEREST_SCALE, MAX_LTV, UPFRONT_COST_INTEREST_PERIOD},
     errors::{ArithmeticError, PositionError},
     state::{CollateralConfig, Position, ProtocolConfig},
 };
@@ -115,14 +115,16 @@ impl<'info> OpenPosition<'info> {
         // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
         let price = price_feed.get_price_unchecked(&feed_id)?;
 
-        let upfront_cost = mint_amount
+        let upfront_cost = (mint_amount as u128)
             .checked_mul(
-                (self.protocol_config.last_interest_rate
+                self.protocol_config.last_interest_rate
                     .checked_mul(UPFRONT_COST_INTEREST_PERIOD as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
-                    / 365) as u64,
+                    / 365,
             )
-            .ok_or(ArithmeticError::ArithmeticOverflow)?;
+            .ok_or(ArithmeticError::ArithmeticOverflow)?
+            .checked_div(INTEREST_SCALE)
+            .ok_or(ArithmeticError::ArithmeticOverflow)? as u64;
 
         let debt_amount = mint_amount
             .checked_add(upfront_cost)
@@ -174,8 +176,8 @@ impl<'info> OpenPosition<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         self.protocol_config.update_totals(debt_amount as i64)?;
-        // register upfront fees
-        self.protocol_config.accumulate_reward(upfront_cost)?;
+
+        
         self.collateral_vault_config.total_debt = self.collateral_vault_config.total_debt
             .checked_add(debt_amount as u128)
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
@@ -197,6 +199,36 @@ impl<'info> OpenPosition<'info> {
         );
 
         mint_to(stable_mint_cpi_ctx, mint_amount)?;
+
+        // register upfront fees
+        // self.protocol_config.accumulate_reward(upfront_cost)?;
+        // Transfer upfront cost to stake vault and update depletion factor
+        if upfront_cost > 0 {
+            let mint_accounts = MintTo {
+                mint: self.stable_mint.to_account_info(),
+                to: self.stake_vault.to_account_info(),
+                authority: self.auth.to_account_info(),
+            };
+
+            mint_to(
+                CpiContext::new_with_signer(
+                    self.token_program.to_account_info(),
+                    mint_accounts,
+                    &[&[b"auth", &[self.protocol_config.auth_bump]]]
+                ),
+                upfront_cost
+            )?;
+
+            // Update depletion factor for this specific vault
+            self.collateral_vault_config.deposit_depletion_factor = self.collateral_vault_config.deposit_depletion_factor
+                .checked_add(
+                    self.collateral_vault_config.deposit_depletion_factor
+                        .checked_mul(upfront_cost as u128)
+                        .ok_or(ArithmeticError::ArithmeticOverflow)?
+                        .checked_div(self.collateral_vault_config.total_debt)
+                        .ok_or(ArithmeticError::ArithmeticOverflow)?
+                ).ok_or(ArithmeticError::ArithmeticOverflow)?;
+        }
 
         Ok(())
     }
