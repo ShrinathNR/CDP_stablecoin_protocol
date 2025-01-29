@@ -124,7 +124,7 @@ impl<'info> ClosePosition<'info> {
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(10_u128.pow(price.exponent.abs() as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?
-            .checked_div(LAMPORTS_PER_SOL as u128) // ! why ? many types of collateral. might have different exponent
+            .checked_div(10_u128.pow(self.collateral_mint.decimals as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
         let ltv = (debt_value as u128) // !! this can get abused if user mints sub 1 usd mint positions and gets rounded down to 0 imo. got to calcualte ltv in one move
