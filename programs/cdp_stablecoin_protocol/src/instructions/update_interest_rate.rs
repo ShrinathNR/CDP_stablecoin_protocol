@@ -119,10 +119,12 @@ impl<'info> UpdateInterestRate<'info> {
                 )
             }
             3 => {
-                return Ok((INTEREST_SCALE + interest_rate)
+                return Ok(
+                    (INTEREST_SCALE + interest_rate)
                     * (INTEREST_SCALE + interest_rate)
+                    / INTEREST_SCALE
                     * (INTEREST_SCALE + interest_rate)
-                    / (INTEREST_SCALE * INTEREST_SCALE))
+                    / INTEREST_SCALE)
             }
             4 => {
                 let pow_two = (INTEREST_SCALE + interest_rate) * (INTEREST_SCALE + interest_rate)
