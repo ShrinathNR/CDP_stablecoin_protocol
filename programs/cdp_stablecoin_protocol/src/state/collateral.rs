@@ -51,7 +51,7 @@ impl CollateralConfig {
                 self.deposit_depletion_factor
                     .checked_mul(pending_reward as u128)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
-                    .checked_div(self.total_debt)
+                    .checked_div(self.total_stake_amount)
                     .ok_or(ArithmeticError::ArithmeticOverflow)?
             ).ok_or(ArithmeticError::ArithmeticOverflow)?;
 
