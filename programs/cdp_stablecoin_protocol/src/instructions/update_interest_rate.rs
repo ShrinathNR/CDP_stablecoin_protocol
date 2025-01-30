@@ -168,7 +168,7 @@ impl<'info> UpdateInterestRate<'info> {
 
         let feed_id: [u8; 32] = get_feed_id_from_hex(&self.protocol_config.stablecoin_price_feed)?;
 
-        let stablecoin_price = price_feed.get_price_unchecked(&feed_id)?;
+        let stablecoin_price = price_feed.get_price_unchecked(&feed_id)?; // get_price_unchecked is used for ease of local testing
 
         // Calculate yearly interest rate
 

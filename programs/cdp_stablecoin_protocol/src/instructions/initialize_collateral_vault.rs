@@ -5,6 +5,7 @@ use crate::{constants::INTEREST_SCALE, state::{CollateralConfig, ProtocolConfig}
 
 #[derive(Accounts)]
 pub struct InitializeCollateralVault<'info> {
+    // todo: address constraint for admin
     #[account(mut)]
     admin: Signer<'info>,
 

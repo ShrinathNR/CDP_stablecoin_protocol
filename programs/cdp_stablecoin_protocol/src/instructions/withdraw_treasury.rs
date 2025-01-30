@@ -8,6 +8,7 @@ use crate::{errors::StakeError, state::ProtocolConfig};
 
 #[derive(Accounts)]
 pub struct WithdrawTreasury<'info> {
+    // todo: address constraint for admin
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(

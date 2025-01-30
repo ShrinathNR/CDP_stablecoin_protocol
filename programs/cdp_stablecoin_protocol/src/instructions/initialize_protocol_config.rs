@@ -7,6 +7,7 @@ use crate::state::ProtocolConfig;
 
 #[derive(Accounts)]
 pub struct InitializeProtocolConfig<'info> {
+    // todo: address constraint for admin
     #[account(mut)]
     admin: Signer<'info>,
     #[account(

@@ -87,8 +87,6 @@ pub struct ClosePosition<'info> {
 
 impl<'info> ClosePosition<'info> {
     pub fn close_position(&mut self) -> Result<()> {
-        // require!(MIN_INTEREST_RATE<= interest_rate && interest_rate <= MAX_INTEREST_RATE, PositionError::InvalidInterestRate);
-        // require!(MIN_LTV <= ltv && ltv <= MAX_LTV, PositionError::InvalidLTV);
 
         // claim any pending rewards for this collateral type
         self.collateral_vault_config.claim_pending_rewards(
@@ -108,7 +106,7 @@ impl<'info> ClosePosition<'info> {
             .calculate_current_debt(&self.position)?;
 
         let debt_value: u64 = debt_amount
-            .checked_div(10_u64.pow(self.stable_mint.decimals as u32)) // is thiscorrrect ??
+            .checked_div(10_u64.pow(self.stable_mint.decimals as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
 
@@ -117,7 +115,7 @@ impl<'info> ClosePosition<'info> {
         let feed_id: [u8; 32] =
             get_feed_id_from_hex(&self.collateral_vault_config.collateral_price_feed)?;
         // let price = price_feed.get_price_no_older_than(&Clock::get()?, maximum_age, &feed_id)?;
-        let price = price_feed.get_price_unchecked(&feed_id)?;
+        let price = price_feed.get_price_unchecked(&feed_id)?; // get_price_unchecked is used for ease of local testing
 
         let collateral_value = (price.price as u128)
             .checked_mul(self.position.collateral_amount as u128)
@@ -127,7 +125,7 @@ impl<'info> ClosePosition<'info> {
             .checked_div(10_u128.pow(self.collateral_mint.decimals as u32))
             .ok_or(ArithmeticError::ArithmeticOverflow)?;
 
-        let ltv = (debt_value as u128) // !! this can get abused if user mints sub 1 usd mint positions and gets rounded down to 0 imo. got to calcualte ltv in one move
+        let ltv = (debt_value as u128) // this can get abused if user mints sub 1 usd mint positions and gets rounded down to 0 imo. got to calcualte ltv in one move
             .checked_mul(10000)
             .ok_or(ArithmeticError::ArithmeticOverflow)?
             .checked_div(collateral_value as u128)
