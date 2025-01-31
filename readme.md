@@ -37,6 +37,12 @@ A Collateralized Debt Position (CDP) is a mechansm used in DeFi where users lock
 - If the stable trades below peg, the interest rate quickly rises.
 - If stable is above peg, the rate stays near base or even goes lower (bounded by min interest).
 
+![interest_rate_dynamics](research/architecture/cdp_interest_rate.png)
+
+To validate our interest rate model design, we conducted simulations using synthetic price data generated through Brownian motion. The simulation compared different interest rate models over a 100-day period to evaluate their responsiveness and stability. The exponential model with low sigma showed the most aggressive response to price deviations, while larger sigma values produced more moderate responses. 
+
+The EMA-smoothed version demonstrated reduced rate volatility while maintaining responsiveness to price changes. After analyzing these results, we selected a base rate of 5% and σ=0.02 as our parameters, striking a balance between stability and sufficient responsiveness to price deviations. In future, we would like to analyze our interest rate formula and compare it to the historical rates of competitors. Additionally using a smoothed version of the interest rate will also be considered to provide a low volatile solution.
+
 ---
 
 # Upfront Mint Fee / Peg Defense
