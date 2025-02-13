@@ -53,10 +53,6 @@ pub mod cdp_stablecoin_protocol {
         ctx.accounts.close_position()
     }
 
-    pub fn update_interest_rate(ctx: Context<UpdateInterestRate>) -> Result<()> {
-        ctx.accounts.update_interest_rate()
-    }
-
     pub fn stake_stable_tokens(ctx: Context<Stake>, amount: u64) -> Result<()> {
         ctx.accounts.init_stake_account(&ctx.bumps)?;
         ctx.accounts.deposit_tokens(amount)
